@@ -1,0 +1,24 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch Package",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "./cmd/idpacmd",
+            "args": [
+                "-action", "get-optimal-workload",
+                "-config", "config.json",
+                "-start-time", "2021-11-09 08:00",
+                "-end-time", "2021-11-09 21:00",
+                "-customer-id", "1",
+                "-duration-m", "20",
+                "-workload-w", "8000"
+            ]
+        }
+    ]
+}

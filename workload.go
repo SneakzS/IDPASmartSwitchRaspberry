@@ -16,7 +16,7 @@ type WireWorkloadSample struct {
 	WorkloadW int32
 }
 
-func GetWireWorkload(db *sql.DB, wireID int32, startTime, endTime time.Time) ([]WireWorkloadSample, error) {
+func GetWireWorkload(conn *sql.DB, wireID int32, startTime, endTime time.Time) ([]WireWorkloadSample, error) {
 
 	/*qry := fmt.Sprintf(`SELECT workloadW, startTime, endTime
 	FROM WireWorkload WHERE wireID = %d AND startTime >= strftime('%%s', '%s') AND endTime <= strftime('%%s', '%s')`,
@@ -24,9 +24,9 @@ func GetWireWorkload(db *sql.DB, wireID int32, startTime, endTime time.Time) ([]
 		startTime.Format("2006-01-02 15:04:05"),
 		endTime.Format("2006-01-02 15:04:05"),
 	)*/
-	res, err := db.Query(
+	res, err := conn.Query(
 		`SELECT workloadW, startTime, endTime
-		FROM WireWorkload WHERE wireID = ? AND startTime >= strftime('%s', ?) AND endTime <= strftime('%s', ?)`,
+		FROM WireWorkload WHERE wireID = ? AND startTime >= datetime(?) AND endTime <= datetime(?)`,
 		wireID,
 		startTime.Format("2006-01-02 15:04:05"),
 		endTime.Format("2006-01-02 15:04:05"),
@@ -69,10 +69,10 @@ func GetWireWorkload(db *sql.DB, wireID int32, startTime, endTime time.Time) ([]
 
 type Workload struct {
 	StartTime time.Time
-	DurationM int32
+	EndTime   time.Time
 }
 
-func getOptimalWorkload(db *sql.DB, wires []dbWire, durationM, workloadW int32, startTime, endTime time.Time) (Workload, error) {
+func getOptimalWorkload(conn *sql.DB, wires []dbWire, durationM, workloadW int32, startTime, endTime time.Time) (Workload, error) {
 	var err error
 
 	type wireSample struct {
@@ -84,20 +84,20 @@ func getOptimalWorkload(db *sql.DB, wires []dbWire, durationM, workloadW int32, 
 
 	for i, wire := range wires {
 		wireSamples[i].w = wire
-		wireSamples[i].samples, err = GetWireWorkload(db, wire.wireId, startTime, endTime)
+		wireSamples[i].samples, err = GetWireWorkload(conn, wire.wireId, startTime, endTime)
 		if err != nil {
 			return Workload{}, err
 		}
 	}
 
-	t := startTime
+	var offsetM int32
 search:
-	for t.Add(time.Duration(durationM) * time.Minute).Before(endTime) {
-		for i := 0; i < int(durationM); i++ {
+	for startTime.Add(time.Duration(offsetM+durationM) * time.Minute).Before(endTime) {
+		for i := offsetM; i < offsetM+durationM; i++ {
 			for _, ws := range wireSamples {
 				if ws.samples[i].WorkloadW+workloadW > ws.w.capacityW {
 					// we detected a wire overload
-					t = t.Add(time.Duration(i) * time.Minute)
+					offsetM = i + 1
 					continue search
 				}
 			}
@@ -110,5 +110,19 @@ search:
 	return Workload{}, ErrWorkloadNotPossible
 
 nooverload:
-	return Workload{StartTime: t, DurationM: durationM}, nil
+	return Workload{
+		StartTime: startTime.Add(time.Duration(offsetM) * time.Minute),
+		EndTime:   startTime.Add(time.Duration(offsetM+durationM) * time.Minute),
+	}, nil
+}
+
+func GetOptimalWorkload(conn *sql.DB, customerID, durationM, workloadW int32, startTime, endTime time.Time) (Workload, error) {
+	wires, err := GetCustomerWires(conn, customerID)
+	if err != nil {
+		return Workload{}, err
+	}
+	if len(wires) == 0 {
+		return Workload{}, ErrCustomerUnknown
+	}
+	return getOptimalWorkload(conn, wires, durationM, workloadW, startTime, endTime)
 }

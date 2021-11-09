@@ -9,9 +9,9 @@ type dbWire struct {
 
 func GetCustomerWires(conn *sql.DB, customerID int32) ([]dbWire, error) {
 	res, err := conn.Query(
-		`SELECT wireID, capacityW FROM Wire as w 
+		`SELECT w.wireID, w.capacityW FROM Wire as w 
 		LEFT JOIN WireCustomer as wc 
-		ON w.wireID = wc.wireID WHERE customerID = %s`, customerID,
+		ON w.wireID = wc.wireID WHERE customerID = ?`, customerID,
 	)
 	if err != nil {
 		return nil, err
