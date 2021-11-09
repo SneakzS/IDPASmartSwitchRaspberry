@@ -27,18 +27,13 @@ func (s *Server) HandleWS(conn *websocket.Conn) error {
 		return err
 	}
 
-	wires, err := GetCustomerWires(s.db, request.CustomerID)
-	if err != nil {
-		return err
-	}
-
-	wl, err := getOptimalWorkload(s.db, wires, request.DurationM, request.AmountW, request.StartTime, request.EndTime)
+	wires, err := GetCustomerWires(nil, request.CustomerID)
 	if err != nil {
 		return err
 	}
 
 	// use wl
-	fmt.Println(wl)
+	fmt.Println(wires)
 
 	return nil
 }

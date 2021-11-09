@@ -2,13 +2,13 @@ package idpa
 
 import "database/sql"
 
-type dbWire struct {
-	wireId    int32
-	capacityW int32
+type Wire struct {
+	WireID    int32
+	CapacityW int32
 }
 
-func GetCustomerWires(conn *sql.DB, customerID int32) ([]dbWire, error) {
-	res, err := conn.Query(
+func GetCustomerWires(tx *sql.Tx, customerID int32) ([]Wire, error) {
+	res, err := tx.Query(
 		`SELECT w.wireID, w.capacityW FROM Wire as w 
 		LEFT JOIN WireCustomer as wc 
 		ON w.wireID = wc.wireID WHERE customerID = ?`, customerID,
@@ -18,10 +18,10 @@ func GetCustomerWires(conn *sql.DB, customerID int32) ([]dbWire, error) {
 	}
 	defer res.Close()
 
-	var wires []dbWire
+	var wires []Wire
 	for res.Next() {
-		var wire dbWire
-		err = res.Scan(&wire.wireId, &wire.capacityW)
+		var wire Wire
+		err = res.Scan(&wire.WireID, &wire.CapacityW)
 		if err != nil {
 			return nil, err
 		}

@@ -52,7 +52,7 @@ type Message struct {
 var (
 	ErrInvalidMessage      = errors.New("invalid message")
 	ErrWorkloadNotPossible = errors.New("workload is not possible")
-	ErrCustomerUnknown     = errors.New("customer is unknown")
+	ErrNoWires             = errors.New("customer has no wires")
 )
 
 func ParseMessage(buf []byte) (typ MessageType, msg []byte, err error) {
