@@ -1,0 +1,4 @@
+{
+    "databaseFileName": "idpa.sqlite3",
+    "uiServerAddress": "ws://10.158.46.219:5028/ws"
+}

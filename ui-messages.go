@@ -9,9 +9,9 @@ const (
 )
 
 const (
-	FlagEnforce   = 1 << 0
-	FlagIsEnabled = 1 << 1
-	FlagHasError  = 1 << 2
+	FlagEnforce            = 1 << 0
+	FlagIsEnabled          = 1 << 1
+	FlagHasConnectionError = 1 << 2
 )
 
 type WorkloadDefinition struct {

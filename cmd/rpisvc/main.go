@@ -1,52 +1,54 @@
 package main
 
 import (
+	"context"
+	"flag"
 	"fmt"
 	"os"
-	"time"
+	"os/signal"
 
 	"github.com/philip-s/idpa"
-	"github.com/stianeikeland/go-rpio"
 )
 
-/*type memoryPin struct {
-	rpio.Pin
-	v rpio.State
-}
-
-func (m memoryPin) Toggle() {
-	if m.v == rpio.High {
-		m.v = rpio.Low
-		m.Low()
-	} else {
-		m.v = rpio.High
-		m.High()
-	}
-}*/
+var (
+	configFile = flag.String("config", "", "Specify the config file")
+	mockPi     = flag.Bool("mock-pi", false, "Set to true to mock the raspberry pi")
+)
 
 func main() {
-	rpi := raspberryPi{
-		ledPin:    rpio.Pin(7),
-		relaisPin: rpio.Pin(17),
-		flags:     idpa.FlagHasError,
-	}
+	// Parse command line flags
+	flag.Parse()
 
-	handleUIConnection(&rpi, "ws://10.158.46.219:5028/ws")
-	return
-
-	go handleUIConnection(&rpi, "ws://10.0.0.3/ws")
-
-	err := rpio.Open()
+	// Read configuration
+	config := idpa.DefaultConfig()
+	err := idpa.ReadConfig(&config, *configFile)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	defer rpio.Close()
 
-	setupGPIO(&rpi)
+	// Setup GPIO and context
+	ctx, cancel := context.WithCancel(context.Background())
+	state := idpa.PiState{}
 
-	for {
-		applyGPIO(&rpi, time.Now())
-		time.Sleep(10 * time.Millisecond)
+	var output idpa.PiOutput
+	if *mockPi {
+		output = &consolePi{}
+	} else {
+
+		output, err = setupRPI()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
 	}
+
+	go idpa.RunUIClient(ctx, &state)
+	go idpa.RunPi(ctx, output, &state)
+
+	done := make(chan os.Signal, 1)
+	signal.Notify(done, os.Interrupt)
+
+	<-done
+	cancel()
 }

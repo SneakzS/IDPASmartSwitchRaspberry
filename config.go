@@ -7,6 +7,7 @@ import (
 
 type Config struct {
 	DatabaseFileName string `json:"databaseFileName"`
+	UIServerAddress  string `json:"uiServerAddress"`
 }
 
 var defaultConfig = Config{
