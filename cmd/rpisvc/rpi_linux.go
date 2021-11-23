@@ -1,3 +1,4 @@
+// implement raspberry pi on linux
 package main
 
 import (
@@ -46,8 +47,11 @@ func setupRPI() (idpa.Output, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rpio.Close()
 
 	rpi := raspberryPiTemplate
 	rpi.setupGPIO()
+}
+
+func closeRPI() {
+	rpio.Close()
 }

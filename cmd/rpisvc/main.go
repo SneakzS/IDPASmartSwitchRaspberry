@@ -41,6 +41,7 @@ func main() {
 			fmt.Println(err)
 			os.Exit(1)
 		}
+		defer closeRPI()
 	}
 
 	go idpa.RunUIClient(ctx, &state)
