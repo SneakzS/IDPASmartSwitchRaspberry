@@ -10,11 +10,15 @@ const (
 	WeekdayFriday     uint8 = 1 << time.Friday
 	WeekdaySaturday   uint8 = 1 << time.Saturday
 	WeekdaySunday     uint8 = 1 << time.Sunday
-	WeekdayAll        uint8 = 127
+	WeekdayAll        uint8 = (1 << 7) - 1
 )
 
-const MonthAll uint16 = (1 << 13) - 1
-const DayAll uint32 = (1 << 31) - 1
+const (
+	MonthAll  uint16 = (1 << 12) - 1
+	DayAll    uint32 = (1 << 31) - 1
+	HourAll   uint32 = (1 << 24) - 1
+	MinuteAll uint64 = (1 << 60) - 1
+)
 
 type RepeatPattern struct {
 	MonthFlags   uint16
@@ -22,14 +26,6 @@ type RepeatPattern struct {
 	HourFlags    uint32
 	MinuteFlags  uint64
 	WeekdayFlags uint8
-}
-
-var monThue0800 = RepeatPattern{
-	MonthFlags:   MonthAll,
-	DayFlags:     DayAll,
-	HourFlags:    (1 << 8),
-	MinuteFlags:  1 << 0,
-	WeekdayFlags: WeekdayMonday & WeekdayThursday,
 }
 
 func (rp RepeatPattern) Matches(t time.Time) bool {

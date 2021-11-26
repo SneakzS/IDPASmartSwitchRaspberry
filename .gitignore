@@ -1,5 +1,6 @@
 .DS_Store
 config.json
-db.sqlite3
+server.sqlite3
+client.sqlite3
 rpisvc$
 rpisvc.exe

@@ -2,17 +2,20 @@ package idpa
 
 import (
 	"context"
-	"fmt"
-	"sync"
 	"time"
 )
 
-type PiState struct {
-	mux               sync.Mutex
-	flags             uint64
-	lastLedToggleTime time.Time
-	ledState          bool
-	c                 Config
+const (
+	_ = iota
+	EventSetFlags
+	EventSetWorkloads
+)
+
+type PiEvent struct {
+	EventID  int
+	Flags    uint64
+	FlagMask uint64
+	Samples  []WorkloadSample
 }
 
 type PiOutput interface {
@@ -20,56 +23,87 @@ type PiOutput interface {
 	SetRelais(on bool)
 }
 
-func (s *PiState) Set(o PiOutput, now time.Time) {
-	s.mux.Lock()
-	defer s.mux.Unlock()
+// RunPI listens for events on the events chan and processes them accordingly
+func RunPI(ctx context.Context, events <-chan PiEvent, o PiOutput) {
+	var (
+		flags             uint64
+		ledState          bool
+		lastLedToggleTime time.Time
+		now               time.Time
+		samples           []WorkloadSample
+	)
 
-	switch {
-	// We detected an error conditon, flash the led
-	case FlagHasConnectionError&s.flags > 0:
-
-		if s.lastLedToggleTime.Add(500 * time.Millisecond).Before(now) {
-			fmt.Println("toggle led")
-			s.ledState = !s.ledState
-			o.SetRelais(false)
-			o.SetLed(s.ledState)
-			s.lastLedToggleTime = now
-		}
-
-	// The output should be enabled
-	case FlagIsEnabled&s.flags > 0:
-		o.SetRelais(true)
-		o.SetLed(true)
-
-	// The output should be disabled
-	case FlagIsEnabled&s.flags == 0:
-		o.SetRelais(false)
-		o.SetLed(false)
-	}
-}
-
-func (s *PiState) SetFlags(flags, mask uint64) {
-	// flip the mask so that every bit that we don't care is 1
-	mask = ^mask
-
-	s.mux.Lock()
-	defer s.mux.Unlock()
-
-	s.flags = (s.flags & mask) | flags
-}
-
-func RunPi(ctx context.Context, o PiOutput, s *PiState) {
-	t := time.NewTimer(10 * time.Millisecond)
-	defer t.Stop()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
+			// the context is done
 			return
+		case ev := <-events:
+			// An event occured
+			switch ev.EventID {
+			case EventSetFlags:
+				// flip the mask so that every bit that we don't care is 1
+				mask := ^ev.FlagMask
+				flags = (flags & mask) | ev.Flags
 
-		case now := <-t.C:
-			t.Reset(10 * time.Millisecond)
-			s.Set(o, now)
+			case EventSetWorkloads:
+				samples = ev.Samples
+			}
+
+		case now = <-ticker.C:
+			// The time was updated
 		}
+
+		// Update our output based on the event
+
+		if flags&FlagEnforce == 0 {
+			// the output is not enforced, if we have a workload at the moment
+			// enable the output
+			for _, sample := range samples {
+				if now.Equal(sample.SampleTime) || sample.SampleTime.Add(-1*time.Minute).Before(now) {
+					goto hasActiveWorkload
+				}
+			}
+
+			flags = flags & (^uint64(FlagIsEnabled))
+			goto hasNoWorkload
+		hasActiveWorkload:
+			flags = flags | FlagIsEnabled
+		hasNoWorkload:
+		}
+
+		switch {
+		// We detected an error conditon, flash the led
+		case FlagIsUIConnected&flags == 0:
+			// ui is not connected, flash the led
+			if false && lastLedToggleTime.Add(500*time.Millisecond).Before(now) {
+				ledState = !ledState
+				o.SetRelais(false)
+				o.SetLed(ledState)
+				lastLedToggleTime = now
+			}
+
+		// The output should be enabled
+		case FlagIsEnabled&flags > 0:
+			o.SetRelais(true)
+			o.SetLed(true)
+
+		// The output should be disabled
+		case FlagIsEnabled&flags == 0:
+			o.SetRelais(false)
+			o.SetLed(false)
+		}
+
 	}
+}
+
+func setFlag(flag uint64) PiEvent {
+	return PiEvent{EventID: EventSetFlags, Flags: flag, FlagMask: flag}
+}
+
+func clearFlag(flag uint64) PiEvent {
+	return PiEvent{EventID: EventSetFlags, Flags: 0, FlagMask: flag}
 }

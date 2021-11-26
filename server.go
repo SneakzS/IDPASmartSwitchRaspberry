@@ -2,38 +2,39 @@ package idpa
 
 import (
 	"database/sql"
-	"encoding/json"
-	"fmt"
+	"log"
+	"net/http"
+	"sync"
 
 	"github.com/gorilla/websocket"
 )
 
-type Server struct {
-	db *sql.DB
+type wsHandler struct {
+	conn *sql.DB
+	mux  *sync.Mutex
 }
 
-func (s *Server) HandleWS(conn *websocket.Conn) error {
-	var (
-		request MsgRequest
-	)
+func RunServer(listen string, conn *sql.DB) error {
+	mux := sync.Mutex{}
+	wsh := wsHandler{conn, &mux}
+	sm := http.NewServeMux()
+	sm.Handle("/ws", wsh)
 
-	_, msgData, err := conn.ReadMessage()
+	return http.ListenAndServe(listen, sm)
+}
+
+func (s wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	upgrader := websocket.Upgrader{}
+
+	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		return err
+		log.Println(err)
 	}
+	defer conn.Close()
 
-	err = json.Unmarshal(msgData, &request)
+	p := wsProviderHandler{conn}
+	err = handleProviderServer(p, s.conn)
 	if err != nil {
-		return err
+		log.Println(err)
 	}
-
-	wires, err := GetCustomerWires(nil, request.CustomerID)
-	if err != nil {
-		return err
-	}
-
-	// use wl
-	fmt.Println(wires)
-
-	return nil
 }

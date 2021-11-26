@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="C:/Users/stop/Documents/IDPASmartSwitchRaspberry/server.sqlite3" readonly="0" foreign_keys="" case_sensitive_like="" temp_store="" wal_autocheckpoint="" synchronous=""/><attached/><window><main_tabs open="structure browser pragmas query" current="1"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="1516"/><column_width id="4" width="0"/></tab_structure><tab_browse><current_table name="0,0:"/><default_encoding codec=""/><browse_table_settings/></tab_browse><tab_sql><sql name="SQL 1">INSERT INTO Customer VALUES (42, 'Test', 'Customer 42', 'Localhost', 'Countryside');
+--INSERT INTO Wire VALUES (NULL, 5000);
+--INSERT INTO Wire VALUES (NULL, 20500);
+
+INSERT INTO WireCustomer VALUES (1, 42);
+INSERT INTO WireCustomer VALUES (3, 42);
+INSERT INTO WireCustomer VALUES (4, 42);</sql><sql name="SQL 2">INSERT INTO WorkloadDefinition VALUES (NULL, 200, 60, 240, 4095, 2147483647, 16777215, 66632, 127, 1);</sql><sql name="SQL 7">DELETE FROM Workload;</sql><current_tab id="2"/></tab_sql></sqlb_project>

@@ -1,53 +1,33 @@
 package idpa
 
 import (
-	"encoding/json"
 	"errors"
 	"time"
 )
 
-type MessageType int32
-
 const (
-	MsgTypeRequest MessageType = iota
-	MsgTypeOffer
-	MsgTypeOfferSelectAck
-	MsgTypeServerAck
+	_ = iota
+	MsgRequest
+	MsgOffer
+	MsgSelect
+	MsgDiscard
+	MsgAck
 )
 
-type MsgRequest struct {
-	RequestID  int32     `json:"requestID"`
-	CustomerID int32     `json:"customerID"`
-	DurationM  int32     `json:"durationM"`
-	AmountW    int32     `json:"amountW"`
-	StartTime  time.Time `json:"startTime"`
-	EndTime    time.Time `json:"endTime"`
-}
+const (
+	ActionSetWorkload    = 1
+	ActionGetWorkload    = 2
+	ActionDeleteWorkload = 3
+	ActionSetFlags       = 4
+	ActionGetFlags       = 5
+)
 
-type MsgOffer struct {
-	RequestID    int32     `json:"requestID"`
-	OfferID      int32     `json:"offerID"`
-	OffersAmount int32     `json:"offersAmount"`
-	StartTime    time.Time `json:"startTime"`
-	EndTime      time.Time `json:"endTime"`
-	PriceCNT     int32     `json:"priceCNT"`
-}
-
-type MsgOfferSelectAck struct {
-	RequestID int32 `json:"requestID"`
-	OfferID   int32 `json:"offerID"`
-	PriceCNT  int32 `json:"priceCNT"`
-}
-
-type MsgServerAck struct {
-	RequestID int32 `json:"requestID"`
-	OfferID   int32 `json:"offerID"`
-}
-
-type Message struct {
-	Type MessageType
-	Data json.RawMessage
-}
+const (
+	FlagEnforce          = 1 << 0
+	FlagIsEnabled        = 1 << 1
+	FlagIsUIConnected    = 1 << 2
+	FlagProviderClientOK = 1 << 3
+)
 
 var (
 	ErrInvalidMessage      = errors.New("invalid message")
@@ -55,14 +35,37 @@ var (
 	ErrNoWires             = errors.New("customer has no wires")
 )
 
-func ParseMessage(buf []byte) (typ MessageType, msg []byte, err error) {
-	var m Message
-	err = json.Unmarshal(buf, &m)
-	if err != nil {
-		return
-	}
+type Offer struct {
+	OfferID   int32
+	OffsetM   int32
+	WorkloadW int32
+	PriceCNT  int32
+}
 
-	typ = m.Type
-	msg = []byte(m.Data)
-	return
+type ProviderMessage struct {
+	MessageTypeID      int32
+	RequestID          int32
+	CustomerID         int32
+	OfferID            int32
+	DurationM          int32
+	ToleranceDurationM int32
+	WorkloadW          int32
+	StartTime          time.Time
+	Offers             []Offer
+}
+
+type WorkloadDefinition struct {
+	WorkloadDefinitionID int32         `json:"workloadPlanId"`
+	WorkloadW            int32         `json:"workloadW"`
+	DurationM            int32         `json:"duratonM"`
+	ToleranceDurationM   int32         `json:"toleranceDurationM"`
+	RepeatPattern        RepeatPattern `json:"repeatPattern"`
+	IsEnabled            bool          `json:"isEnabled"`
+}
+
+type UIMessage struct {
+	ActionID           int32 `json:"actionId"`
+	WorkloadDefinition `json:"workloadDefinition,omitempty"`
+	Flags              uint64 `json:"flags,omitempty"`
+	FlagMask           uint64 `json:"flagMask,omitempty"`
 }

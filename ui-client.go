@@ -9,18 +9,18 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func RunUIClient(ctx context.Context, s *PiState) {
+func RunUIClient(ctx context.Context, events chan<- PiEvent, serverURL string) {
 	dialer := websocket.Dialer{}
 
-mainloop:
 	for {
-		conn, _, err := dialer.DialContext(ctx, s.c.UIServerAddress, nil)
+		conn, _, err := dialer.DialContext(ctx, serverURL, nil)
 		if err != nil {
 			log.Println(err)
-			goto setError
+			goto handleError
 		}
 
-		log.Println("connected to " + s.c.UIServerAddress)
+		log.Println("connected to " + serverURL)
+		events <- setFlag(FlagIsUIConnected)
 
 	recevie:
 		for {
@@ -32,11 +32,8 @@ mainloop:
 				}
 
 				log.Println(err)
-				goto setError
+				goto handleError
 			}
-
-			// clear error flag
-			s.SetFlags(0, FlagHasConnectionError)
 
 			switch msgType {
 			case websocket.BinaryMessage:
@@ -49,7 +46,7 @@ mainloop:
 					continue recevie
 				}
 
-				err = handleUIMessage(s, &parsedMessage)
+				err = handleUIMessage(events, &parsedMessage)
 				if err != nil {
 					log.Println(err)
 					continue recevie
@@ -57,22 +54,24 @@ mainloop:
 
 			case websocket.CloseMessage:
 				log.Println("connection closed")
-				goto setError
+				goto handleError
 			}
 		}
-	}
 
-setError:
-	s.SetFlags(FlagHasConnectionError, FlagHasConnectionError)
-	time.Sleep(5 * time.Second)
-	goto mainloop
+	handleError:
+		if conn != nil {
+			conn.Close()
+		}
+		events <- clearFlag(FlagIsUIConnected)
+		time.Sleep(5 * time.Second)
+	}
 
 }
 
-func handleUIMessage(s *PiState, msg *UIMessage) error {
+func handleUIMessage(events chan<- PiEvent, msg *UIMessage) error {
 	switch msg.ActionID {
 	case ActionSetFlags:
-		s.SetFlags(msg.Flags, msg.FlagMask)
+		events <- PiEvent{EventID: EventSetFlags, Flags: msg.Flags, FlagMask: msg.FlagMask}
 	}
 
 	return nil

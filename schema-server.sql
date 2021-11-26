@@ -19,11 +19,11 @@ CREATE TABLE WireCustomer (
     FOREIGN KEY (customerID) REFERENCES Customer(customerID)
 );
 
+
 CREATE TABLE WireWorkload (
-    wireWorkloadID INTEGER NOT NULL PRIMARY KEY,
     wireID INTEGER NOT NULL,
+    sampleTime TIMESTAMP NOT NULL,
     workloadW INTEGER NOT NULL,
-    startTime TIMESTAMP NOT NULL,
-    endTime TIMESTAMP NOT NULL,
+    PRIMARY KEY(wireID, sampleTime),
     FOREIGN KEY (wireID) REFERENCES Wire(wireID)
 );
