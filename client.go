@@ -149,7 +149,7 @@ func PlanWorloads(definitions []WorkloadDefinition, startTime time.Time, duratio
 	for i := int32(0); i < durationM; i++ {
 		t := startTime.Add(time.Duration(i) * time.Minute)
 		for _, d := range definitions {
-			if d.RepeatPattern.Matches(t) {
+			if d.IsEnabled && d.RepeatPattern.Matches(t) {
 
 				planned = append(planned, PlannedWorkload{
 					Definition: d,

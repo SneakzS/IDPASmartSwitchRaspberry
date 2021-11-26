@@ -14,13 +14,12 @@ type wsHandler struct {
 	mux  *sync.Mutex
 }
 
-func RunServer(listen string, conn *sql.DB) error {
+func GetRoutes(conn *sql.DB) map[string]http.Handler {
 	mux := sync.Mutex{}
-	wsh := wsHandler{conn, &mux}
-	sm := http.NewServeMux()
-	sm.Handle("/ws", wsh)
 
-	return http.ListenAndServe(listen, sm)
+	return map[string]http.Handler{
+		"/ws": wsHandler{conn, &mux},
+	}
 }
 
 func (s wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

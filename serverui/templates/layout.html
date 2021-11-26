@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>{{.Title}} - idpa</title>
+    <link rel="stylesheet" href="{{.Static "css/main.css"}}">
+</head>
+
+<body>
+    {{block "navigation" .}}
+    <div class="navigation">
+        Navbar
+    </div>
+    {{end}}
+    {{block "sidebar" .}}
+    <div class="sidebar">
+        Sidebar
+    </div>
+    {{end}}
+    <div class="content">
+        {{block "content" .}}
+        {{end}}
+    </div>
+</body>
+
+</html>

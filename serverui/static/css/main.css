@@ -1,0 +1,21 @@
+body {
+    margin: 0;
+}
+
+.navigation {
+    height: 30px;
+    background-color: red;
+}
+
+.sidebar {
+    width: 250px;
+    position: absolute;
+    top: 30px;
+    left: 0;
+    bottom: 0;
+    background-color: green;
+}
+
+.content {
+    margin-left: 250px;
+}

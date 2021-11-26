@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/drbig/simpleini"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/philip-s/idpa"
+	"github.com/philip-s/idpa/serverui"
 )
 
 var (
@@ -291,5 +293,13 @@ func runServer(cfg *simpleini.INI) error {
 	}
 	defer conn.Close()
 
-	return idpa.RunServer(listen, conn)
+	for pattern, handler := range serverui.GetRoutes(conn) {
+		http.Handle(pattern, handler)
+	}
+
+	for pattern, handler := range idpa.GetRoutes(conn) {
+		http.Handle(pattern, handler)
+	}
+
+	return http.ListenAndServe(listen, nil)
 }
