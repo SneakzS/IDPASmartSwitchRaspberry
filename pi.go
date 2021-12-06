@@ -55,22 +55,26 @@ func RunPI(ctx context.Context, events <-chan PiEvent, o PiOutput) {
 					sampleMap[sample.SampleTime.Unix()] = sample
 				}
 			}
-
+			continue
 		case now = <-ticker.C:
 			// The time was updated
-			now = now.UTC().Round(time.Minute)
+			now = now.UTC().Truncate(time.Minute)
 		}
 
 		// Update our output based on the event
 
 		if flags&FlagEnforce == 0 {
 			// the output is not enforced. Check if we have an active workload and act acordingly
-			sample := sampleMap[now.Unix()]
+			sample, ok := sampleMap[now.Unix()]
+			if !ok {
+				continue
+			}
 			if sample.OutputEnabled {
 				flags = flags | FlagIsEnabled
 			} else {
 				flags = flags & (^uint64(FlagIsEnabled))
 			}
+
 		}
 
 		switch {
@@ -83,7 +87,9 @@ func RunPI(ctx context.Context, events <-chan PiEvent, o PiOutput) {
 				o.SetLed(ledState)
 				lastLedToggleTime = now
 			}
+		}
 
+		switch {
 		// The output should be enabled
 		case FlagIsEnabled&flags > 0:
 			o.SetRelais(true)

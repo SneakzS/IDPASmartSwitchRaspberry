@@ -14,7 +14,7 @@ type WireWorkload struct {
 
 func GetWireWorkload(tx *sql.Tx, wireID int32, startTime time.Time, durationM int32) ([]WireWorkload, error) {
 
-	startTime = startTime.UTC().Round(time.Minute)
+	startTime = startTime.UTC().Truncate(time.Minute)
 	samples := make([]WireWorkload, durationM)
 
 	for i := range samples {
@@ -61,7 +61,7 @@ func GetOptimalWorkloadOffset(tx *sql.Tx, wires []Wire, d WorkloadDefinition, st
 		w       Wire
 		samples []WireWorkload
 	}
-	startTime = startTime.Round(time.Minute).UTC()
+	startTime = startTime.Truncate(time.Minute).UTC()
 	wireSamples := make([]wireSample, len(wires))
 
 	for i, wire := range wires {
@@ -179,7 +179,7 @@ func CreateWorkload(tx *sql.Tx, d WorkloadDefinition, matchTime time.Time, offse
 }
 
 func CreateWorkloadSamples(tx *sql.Tx, workloadID int32, startTime time.Time, durationM int32) error {
-	startTime = startTime.Round(time.Minute)
+	startTime = startTime.Truncate(time.Minute)
 	samples := make([]WorkloadSample, durationM)
 	for i := range samples {
 		samples[i] = WorkloadSample{
@@ -215,7 +215,7 @@ func CreateWorkloadAndSamples(tx *sql.Tx, d WorkloadDefinition, matchTime time.T
 }
 
 func GetWorkloadSamples(tx *sql.Tx, startTime time.Time, durationM int32) ([]WorkloadSample, error) {
-	startTime = startTime.Round(time.Minute)
+	startTime = startTime.UTC().Truncate(time.Minute)
 
 	res, err := tx.Query(
 		`SELECT sampleTime, workloadID, measuredWorkloadW FROM WorkloadSample
@@ -267,7 +267,7 @@ type Workload struct {
 
 func GetWorkloads(tx *sql.Tx, startTime time.Time, durationM int32) ([]Workload, error) {
 	var workloads []Workload
-	startTime = startTime.Round(time.Minute)
+	startTime = startTime.Truncate(time.Minute)
 
 	res, err := tx.Query(
 		`SELECT workloadID, workloadDefinitionID, matchTime, workloadW, offsetM, durationM

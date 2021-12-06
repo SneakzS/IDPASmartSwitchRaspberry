@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/philip-s/idpa"
 )
@@ -16,10 +17,11 @@ var _ idpa.PiOutput = &consolePi{}
 
 func (m *consolePi) SetLed(on bool) {
 	if on != m.ledState {
+		timestamp := time.Now().Format("2006-01-02 15:04:05")
 		if on {
-			fmt.Println("turn on led")
+			fmt.Println(timestamp, ": turn on led")
 		} else {
-			fmt.Println("turn off led")
+			fmt.Println(timestamp, ": turn off led")
 		}
 	}
 
@@ -28,10 +30,11 @@ func (m *consolePi) SetLed(on bool) {
 
 func (m *consolePi) SetRelais(on bool) {
 	if on != m.relaisState {
+		timestamp := time.Now().Format("2006-01-02 15:04:05")
 		if on {
-			fmt.Println("turn on relais")
+			fmt.Println(timestamp, ": turn on relais")
 		} else {
-			fmt.Println("turn off relais")
+			fmt.Println(timestamp, ": turn off relais")
 		}
 	}
 

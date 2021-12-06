@@ -3,9 +3,14 @@ package serverui
 import (
 	"database/sql"
 	"embed"
+	"fmt"
 	"html/template"
+	"io/fs"
 	"net/http"
+	"os"
 	"path"
+
+	"github.com/julienschmidt/httprouter"
 )
 
 var (
@@ -13,16 +18,28 @@ var (
 	templateFiles embed.FS
 	//go:embed static/*
 	static embed.FS
-
-	staticPath = "/static/"
 )
 
-func GetRoutes(conn *sql.DB) map[string]http.Handler {
-	return map[string]http.Handler{
-		staticPath:   http.FileServer(http.FS(static)),
-		"/":          indexController{conn},
-		"/customers": customerController{conn},
-	}
+type dummyfs struct{}
+
+var _ fs.FS = dummyfs{}
+
+func (dummyfs) Open(name string) (fs.File, error) {
+	fmt.Println(name)
+	return nil, os.ErrNotExist
+}
+
+func GetHTTPHandler(conn *sql.DB) http.Handler {
+	r := httprouter.New()
+
+	getIndexRoutes(r)
+	getCustomerRoutes(r, conn)
+
+	r.Handler("GET", "/static/*filepath", http.FileServer(http.FS(static)))
+
+	//http.Handle(staticPath)
+
+	return r
 }
 
 type baseView struct {
@@ -30,7 +47,7 @@ type baseView struct {
 }
 
 func (baseView) Static(resource string) string {
-	return path.Join(staticPath, resource)
+	return path.Join("/static/", resource)
 }
 
 func compileTemplate(files ...string) *template.Template {

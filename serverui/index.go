@@ -1,14 +1,11 @@
 package serverui
 
 import (
-	"database/sql"
 	"log"
 	"net/http"
-)
 
-type indexController struct {
-	conn *sql.DB
-}
+	"github.com/julienschmidt/httprouter"
+)
 
 type indexView struct {
 	baseView
@@ -17,11 +14,15 @@ type indexView struct {
 
 var indexTemplate = compileTemplate("layout.html", "index.html")
 
-func (c indexController) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	view := indexView{Message: "Hello World"}
-	view.Title = "Home"
-	err := indexTemplate.Execute(w, view)
-	if err != nil {
-		log.Println(err)
-	}
+func getIndexRoutes(r *httprouter.Router) {
+
+	// /
+	r.GET("/", func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+		view := indexView{Message: "Hello World"}
+		view.Title = "Home"
+		err := indexTemplate.Execute(w, view)
+		if err != nil {
+			log.Println(err)
+		}
+	})
 }

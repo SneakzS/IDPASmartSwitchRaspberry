@@ -33,6 +33,7 @@ func RunProviderClient(ctx context.Context, events chan<- PiEvent, conn *sql.DB,
 				EventID: EventSetWorkloads,
 				Samples: wls,
 			}
+
 			events <- setFlag(FlagProviderClientOK)
 		}
 	}
@@ -144,7 +145,7 @@ type PlannedWorkload struct {
 
 func PlanWorloads(definitions []WorkloadDefinition, startTime time.Time, durationM int32) []PlannedWorkload {
 	var planned []PlannedWorkload
-	startTime = startTime.Round(time.Minute)
+	startTime = startTime.Truncate(time.Minute)
 
 	for i := int32(0); i < durationM; i++ {
 		t := startTime.Add(time.Duration(i) * time.Minute)
@@ -164,7 +165,7 @@ func PlanWorloads(definitions []WorkloadDefinition, startTime time.Time, duratio
 
 func CheckWorkloadOverlaps(samples []WorkloadSample, startTime time.Time, durationM int32) (WorkloadSample, bool) {
 	set := make(map[int64]WorkloadSample)
-	startTime = startTime.Round(time.Minute)
+	startTime = startTime.Truncate(time.Minute)
 
 	for _, s := range samples {
 		set[s.SampleTime.Unix()] = s

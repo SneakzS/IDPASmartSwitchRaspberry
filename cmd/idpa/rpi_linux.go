@@ -1,3 +1,5 @@
+//go:build linux
+
 // implement raspberry pi on linux
 package main
 
@@ -12,7 +14,7 @@ type raspberryPi struct {
 }
 
 var raspberryPiTemplate = raspberryPi{
-	ledPin:    rpio.Pin(7),
+	ledPin:    rpio.Pin(18),
 	relaisPin: rpio.Pin(17),
 }
 
@@ -42,14 +44,16 @@ func (rpi raspberryPi) SetRelais(on bool) {
 	}
 }
 
-func setupRPI() (idpa.Output, error) {
-	err = rpio.Open()
+func setupRPI() (idpa.PiOutput, error) {
+	err := rpio.Open()
 	if err != nil {
 		return nil, err
 	}
 
 	rpi := raspberryPiTemplate
 	rpi.setupGPIO()
+
+	return rpi, nil
 }
 
 func closeRPI() {

@@ -293,13 +293,7 @@ func runServer(cfg *simpleini.INI) error {
 	}
 	defer conn.Close()
 
-	for pattern, handler := range serverui.GetRoutes(conn) {
-		http.Handle(pattern, handler)
-	}
-
-	for pattern, handler := range idpa.GetRoutes(conn) {
-		http.Handle(pattern, handler)
-	}
-
+	handler := serverui.GetHTTPHandler(conn)
+	http.Handle("/", handler)
 	return http.ListenAndServe(listen, nil)
 }
