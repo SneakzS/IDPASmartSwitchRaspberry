@@ -64,8 +64,8 @@ type WorkloadDefinition struct {
 }
 
 type UIMessage struct {
-	ActionID           int32 `json:"actionId"`
-	WorkloadDefinition `json:"workloadDefinition,omitempty"`
-	Flags              uint64 `json:"flags,omitempty"`
-	FlagMask           uint64 `json:"flagMask,omitempty"`
+	ActionID           int32              `json:"actionId"`
+	WorkloadDefinition WorkloadDefinition `json:"workloadDefinition,omitempty"`
+	Flags              uint64             `json:"flags,omitempty"`
+	FlagMask           uint64             `json:"flagMask,omitempty"`
 }
