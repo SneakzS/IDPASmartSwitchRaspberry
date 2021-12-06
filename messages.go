@@ -20,6 +20,7 @@ const (
 	ActionDeleteWorkload = 3
 	ActionSetFlags       = 4
 	ActionGetFlags       = 5
+	ActionHelo           = 6
 )
 
 const (
@@ -68,4 +69,5 @@ type UIMessage struct {
 	WorkloadDefinition WorkloadDefinition `json:"workloadDefinition,omitempty"`
 	Flags              uint64             `json:"flags,omitempty"`
 	FlagMask           uint64             `json:"flagMask,omitempty"`
+	ClientGUID         string             `json:"clientGuid"`
 }

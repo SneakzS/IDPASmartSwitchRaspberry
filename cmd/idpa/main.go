@@ -242,6 +242,11 @@ func runClient(cfg *simpleini.INI) error {
 	if err != nil {
 		return err
 	}
+	uiClientGUID, err := cfg.GetString("Client", "uiclientguid")
+	if err != nil {
+		return err
+	}
+
 	providerServerURL, err := cfg.GetString("Client", "providerserverurl")
 	if err != nil {
 		return err
@@ -266,7 +271,10 @@ func runClient(cfg *simpleini.INI) error {
 	events := make(chan idpa.PiEvent, 64)
 
 	go idpa.RunPI(ctx, events, output)
-	go idpa.RunUIClient(ctx, events, uiServerURL)
+	go idpa.RunUIClient(ctx, events, idpa.UIConfig{
+		ServerURL:  uiServerURL,
+		ClientGUID: uiClientGUID,
+	})
 	go idpa.RunProviderClient(ctx, events, conn, providerServerURL, int32(customerID))
 
 	// Wait for SIGINT to quit

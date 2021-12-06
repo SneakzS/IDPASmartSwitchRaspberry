@@ -9,17 +9,27 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func RunUIClient(ctx context.Context, events chan<- PiEvent, serverURL string) {
+type UIConfig struct {
+	ServerURL  string
+	ClientGUID string
+}
+
+func RunUIClient(ctx context.Context, events chan<- PiEvent, c UIConfig) {
 	dialer := websocket.Dialer{}
 
 	for {
-		conn, _, err := dialer.DialContext(ctx, serverURL, nil)
+		conn, _, err := dialer.DialContext(ctx, c.ServerURL, nil)
 		if err != nil {
 			log.Println(err)
 			goto handleError
 		}
 
-		log.Println("connected to " + serverURL)
+		err = sendHeloMessage(conn, c.ClientGUID)
+		if err != nil {
+			goto handleError
+		}
+
+		log.Println("connected to " + c.ServerURL)
 		events <- setFlag(FlagIsUIConnected)
 
 	recevie:
@@ -66,6 +76,20 @@ func RunUIClient(ctx context.Context, events chan<- PiEvent, serverURL string) {
 		time.Sleep(5 * time.Second)
 	}
 
+}
+
+func sendHeloMessage(c *websocket.Conn, clientGUID string) error {
+	msg := UIMessage{
+		ActionID:   ActionHelo,
+		ClientGUID: clientGUID,
+	}
+
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+
+	return c.WriteMessage(websocket.TextMessage, data)
 }
 
 func handleUIMessage(events chan<- PiEvent, msg *UIMessage) error {
