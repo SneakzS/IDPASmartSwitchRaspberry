@@ -57,7 +57,7 @@ type ProviderMessage struct {
 type WorkloadDefinition struct {
 	WorkloadDefinitionID int32         `json:"workloadPlanId"`
 	WorkloadW            int32         `json:"workloadW"`
-	DurationM            int32         `json:"duratonM"`
+	DurationM            int32         `json:"durationM"`
 	ToleranceDurationM   int32         `json:"toleranceDurationM"`
 	RepeatPattern        RepeatPattern `json:"repeatPattern"`
 	IsEnabled            bool          `json:"isEnabled"`
