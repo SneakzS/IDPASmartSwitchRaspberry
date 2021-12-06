@@ -4,3 +4,5 @@ server.sqlite3
 client.sqlite3
 rpisvc$
 rpisvc.exe
+idpa_rpi
+idpa_win.exe

@@ -238,10 +238,10 @@ func runClient(cfg *simpleini.INI) error {
 		return fmt.Errorf("invalid output %s", outputStr)
 	}
 
-	/*uiServerURL, err := cfg.GetString("Client", "uiserverurl")
+	uiServerURL, err := cfg.GetString("Client", "uiserverurl")
 	if err != nil {
 		return err
-	}*/
+	}
 	providerServerURL, err := cfg.GetString("Client", "providerserverurl")
 	if err != nil {
 		return err
@@ -266,7 +266,7 @@ func runClient(cfg *simpleini.INI) error {
 	events := make(chan idpa.PiEvent, 64)
 
 	go idpa.RunPI(ctx, events, output)
-	//go idpa.RunUIClient(ctx, events, uiServerURL)
+	go idpa.RunUIClient(ctx, events, uiServerURL)
 	go idpa.RunProviderClient(ctx, events, conn, providerServerURL, int32(customerID))
 
 	// Wait for SIGINT to quit
