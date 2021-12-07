@@ -1,21 +1,12 @@
 package main
 
 import (
-	"context"
-	"database/sql"
 	"flag"
 	"fmt"
-	"net/http"
 	"os"
-	"os/signal"
-	"strings"
-	"time"
 
-	"github.com/drbig/simpleini"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/philip-s/idpa"
-	"github.com/philip-s/idpa/serverui"
 )
 
 var (
@@ -49,6 +40,8 @@ func main() {
 		err = runService()
 	case "new-uiclientguid":
 		err = newUIClientGuid()
+	case "init-db":
+		err = initializeDatabase()
 	}
 
 	if err != nil {
@@ -65,261 +58,7 @@ func executeScript() error {
 		return fmt.Errorf("-db is required")
 	}
 
-	db, err := sql.Open("sqlite3", *databaseFile)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	script, err := os.ReadFile(*script)
-	if err != nil {
-		return err
-	}
-
-	statements := strings.Split(string(script), ";")
-	for _, stmt := range statements {
-		stmt = strings.TrimSpace(stmt)
-		if len(stmt) > 0 {
-			_, err = db.Exec(stmt)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return tx.Commit()
-}
-
-func getWireWorkload() error {
-	if *databaseFile == "" {
-		return fmt.Errorf("-db is required")
-	}
-
-	conn, err := sql.Open("sqlite3", *databaseFile)
-	if err != nil {
-		return err
-	}
-	tx, err := conn.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Commit()
-
-	startTime, err := time.Parse("2006-01-02 15:04:05", *startTimeStr)
-	if err != nil {
-		return err
-	}
-
-	samples, err := idpa.GetWireWorkload(tx, int32(*wireID), startTime, int32(*durationM))
-	if err != nil {
-		return err
-	}
-
-	for _, s := range samples {
-		fmt.Printf("%s;%d\n", s.SampleTime.Format("2006-01-02 15:04:05"), s.WorkloadW)
-	}
-
-	return nil
-}
-
-func getOptimalWorkload() error {
-	if *databaseFile == "" {
-		return fmt.Errorf("-db is required")
-	}
-
-	db, err := sql.Open("sqlite3", *databaseFile)
-	if err != nil {
-		return err
-	}
-
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	startTime, err := time.Parse("2006-01-02 15:04:05", *startTimeStr)
-	if err != nil {
-		return err
-	}
-
-	wires, err := idpa.GetCustomerWires(tx, int32(*customerID))
-	if err != nil {
-		return err
-	}
-
-	d := idpa.WorkloadDefinition{
-		WorkloadW:          int32(*workloadW),
-		DurationM:          int32(*durationM),
-		ToleranceDurationM: int32(*toleranceDuration),
-		IsEnabled:          true,
-	}
-
-	offsetM, err := idpa.GetOptimalWorkloadOffset(tx, wires, d, startTime)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Your optimal starts at %s \n", startTime.Add(time.Duration(offsetM)*time.Minute).Format("2006-01-02 15:04:05"))
-
-	if *add {
-		for _, wire := range wires {
-			err = idpa.AddWireWorkload(tx, wire.WireID, startTime, d.DurationM, d.WorkloadW)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return tx.Commit()
-
-}
-
-func loadConfig() (*simpleini.INI, error) {
-	if *config == "" {
-		return nil, fmt.Errorf("-service is required")
-	}
-
-	cfp, err := os.Open(*config)
-	if err != nil {
-		return nil, err
-	}
-	defer cfp.Close()
-
-	return simpleini.Parse(cfp)
-}
-
-func saveConfig(cfg *simpleini.INI) error {
-	cfp, err := os.Create(*config)
-	if err != nil {
-		return err
-	}
-	defer cfp.Close()
-
-	return cfg.Write(cfp, true)
-}
-
-func runService() error {
-	cfg, err := loadConfig()
-	if err != nil {
-		return err
-	}
-
-	mode, err := cfg.GetString("Service", "mode")
-	if err != nil {
-		return err
-	}
-
-	// Override the service mode based on the flag
-	if *serviceMode != "" {
-		mode = *serviceMode
-	}
-
-	switch mode {
-	case "client":
-		return runClient(cfg)
-	case "server":
-		return runServer(cfg)
-	default:
-		return fmt.Errorf("invalid service mode %s", mode)
-	}
-}
-
-func runClient(cfg *simpleini.INI) error {
-	var output idpa.PiOutput
-	outputStr, err := cfg.GetString("Client", "output")
-	if err != nil {
-		return err
-	}
-	switch outputStr {
-	case "rpi":
-		output, err = setupRPI()
-		if err != nil {
-			return err
-		}
-		defer closeRPI()
-
-	case "console":
-		output = &consolePi{}
-
-	default:
-		return fmt.Errorf("invalid output %s", outputStr)
-	}
-
-	uiServerURL, err := cfg.GetString("Client", "uiserverurl")
-	if err != nil {
-		return err
-	}
-	uiClientGUID, err := cfg.GetString("Client", "uiclientguid")
-	if err != nil {
-		return err
-	}
-	if uiClientGUID == "" {
-		return fmt.Errorf("uiclientguid is required")
-	}
-
-	providerServerURL, err := cfg.GetString("Client", "providerserverurl")
-	if err != nil {
-		return err
-	}
-	database, err := cfg.GetString("Client", "database")
-	if err != nil {
-		return err
-	}
-	conn, err := sql.Open("sqlite3", database)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	customerID, err := cfg.GetInt("Client", "customerid")
-	if err != nil {
-		return err
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	events := make(chan idpa.PiEvent, 64)
-
-	go idpa.RunPI(ctx, events, output)
-	go idpa.RunUIClient(ctx, events, idpa.UIConfig{
-		ServerURL:  uiServerURL,
-		ClientGUID: uiClientGUID,
-	})
-	go idpa.RunProviderClient(ctx, events, conn, providerServerURL, int32(customerID))
-
-	// Wait for SIGINT to quit
-	done := make(chan os.Signal, 1)
-	signal.Notify(done, os.Interrupt)
-	<-done
-	return nil
-}
-
-func runServer(cfg *simpleini.INI) error {
-	database, err := cfg.GetString("Server", "database")
-	if err != nil {
-		return err
-	}
-
-	listen, err := cfg.GetString("Server", "listen")
-	if err != nil {
-		return err
-	}
-
-	conn, err := sql.Open("sqlite3", database)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	handler := serverui.GetHTTPHandler(conn)
-	http.Handle("/", handler)
-	return http.ListenAndServe(listen, nil)
+	return invokeScriptFile(*script, *databaseFile)
 }
 
 func newUIClientGuid() error {
@@ -332,4 +71,23 @@ func newUIClientGuid() error {
 	cfg.SetString("Client", "uiclientguid", newUUID.String())
 
 	return saveConfig(cfg)
+}
+
+func initializeDatabase() error {
+	if *serviceMode == "" {
+		return fmt.Errorf("-service-mode is required")
+	}
+
+	if *databaseFile == "" {
+		return fmt.Errorf("-db is required")
+	}
+
+	switch *serviceMode {
+	case "server":
+		return invokeScript(createServerDBScript, *databaseFile)
+	case "client":
+		return invokeScript(createClientDBScript, *databaseFile)
+	default:
+		return fmt.Errorf("invalid service mode %s", *serviceMode)
+	}
 }
