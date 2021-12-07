@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/drbig/simpleini"
+	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/philip-s/idpa"
 	"github.com/philip-s/idpa/serverui"
@@ -28,7 +29,7 @@ var (
 	workloadW         = flag.Int("workload-w", 0, "Workload in Watts")
 	add               = flag.Bool("add", false, "add the to the db")
 	databaseFile      = flag.String("db", "", "Specify the database")
-	serviceConfig     = flag.String("service", "", "Specify the service config file")
+	config            = flag.String("config", "", "Specify the service config file")
 	serviceMode       = flag.String("service-mode", "", "Override the service mode specified in the config")
 )
 
@@ -46,6 +47,8 @@ func main() {
 		err = getOptimalWorkload()
 	case "service":
 		err = runService()
+	case "new-uiclientguid":
+		err = newUIClientGuid()
 	}
 
 	if err != nil {
@@ -177,12 +180,12 @@ func getOptimalWorkload() error {
 
 }
 
-func loadServiceConfig() (*simpleini.INI, error) {
-	if *serviceConfig == "" {
+func loadConfig() (*simpleini.INI, error) {
+	if *config == "" {
 		return nil, fmt.Errorf("-service is required")
 	}
 
-	cfp, err := os.Open(*serviceConfig)
+	cfp, err := os.Open(*config)
 	if err != nil {
 		return nil, err
 	}
@@ -191,8 +194,18 @@ func loadServiceConfig() (*simpleini.INI, error) {
 	return simpleini.Parse(cfp)
 }
 
+func saveConfig(cfg *simpleini.INI) error {
+	cfp, err := os.Create(*config)
+	if err != nil {
+		return err
+	}
+	defer cfp.Close()
+
+	return cfg.Write(cfp, true)
+}
+
 func runService() error {
-	cfg, err := loadServiceConfig()
+	cfg, err := loadConfig()
 	if err != nil {
 		return err
 	}
@@ -245,6 +258,9 @@ func runClient(cfg *simpleini.INI) error {
 	uiClientGUID, err := cfg.GetString("Client", "uiclientguid")
 	if err != nil {
 		return err
+	}
+	if uiClientGUID == "" {
+		return fmt.Errorf("uiclientguid is required")
 	}
 
 	providerServerURL, err := cfg.GetString("Client", "providerserverurl")
@@ -304,4 +320,16 @@ func runServer(cfg *simpleini.INI) error {
 	handler := serverui.GetHTTPHandler(conn)
 	http.Handle("/", handler)
 	return http.ListenAndServe(listen, nil)
+}
+
+func newUIClientGuid() error {
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+
+	newUUID := uuid.New()
+	cfg.SetString("Client", "uiclientguid", newUUID.String())
+
+	return saveConfig(cfg)
 }
