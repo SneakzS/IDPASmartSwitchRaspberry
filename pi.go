@@ -2,6 +2,7 @@ package idpa
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -33,9 +34,10 @@ func RunPI(ctx context.Context, events <-chan PiEvent, o PiOutput) {
 		sampleMap         map[int64]WorkloadSample
 	)
 
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
 
+loop:
 	for {
 		select {
 		case <-ctx.Done():
@@ -49,59 +51,61 @@ func RunPI(ctx context.Context, events <-chan PiEvent, o PiOutput) {
 				mask := ^ev.FlagMask
 				flags = (flags & mask) | ev.Flags
 
+				fmt.Printf("new flags received: 0b%b\n", flags)
+
+				now = time.Now()
+				goto applyOutput
+
 			case EventSetWorkloads:
 				sampleMap = make(map[int64]WorkloadSample)
 				for _, sample := range ev.Samples {
 					sampleMap[sample.SampleTime.Unix()] = sample
 				}
+
+				now = time.Now()
+				goto applyOutput
 			}
-			continue
+
 		case now = <-ticker.C:
 			// The time was updated
-			now = now.UTC().Truncate(time.Minute)
-		}
 
-		// Update our output based on the event
+			// if no specific output is enforced, check if we have an active workflow
+			// and act acordingly
+			if flags&FlagEnforce == 0 {
+				nowTC := now.Truncate(time.Minute)
+				sample := sampleMap[nowTC.Unix()]
 
-		if flags&FlagEnforce == 0 {
-			// the output is not enforced. Check if we have an active workload and act acordingly
-			sample, ok := sampleMap[now.Unix()]
-			if !ok {
-				continue
+				if sample.OutputEnabled {
+					flags = flags | FlagIsEnabled
+				} else {
+					flags = flags & (^uint64(FlagIsEnabled))
+				}
 			}
-			if sample.OutputEnabled {
-				flags = flags | FlagIsEnabled
-			} else {
-				flags = flags & (^uint64(FlagIsEnabled))
-			}
-
-		}
-
-		switch {
-		// We detected an error conditon, flash the led
-		case FlagIsUIConnected&flags == 0:
-			// ui is not connected, flash the led
-			if false && lastLedToggleTime.Add(500*time.Millisecond).Before(now) {
-				ledState = !ledState
-				o.SetRelais(false)
-				o.SetLed(ledState)
-				lastLedToggleTime = now
-			}
-		}
-
-		switch {
-		// The output should be enabled
-		case FlagIsEnabled&flags > 0:
-			o.SetRelais(true)
-			o.SetLed(true)
-
-		// The output should be disabled
-		case FlagIsEnabled&flags == 0:
-			o.SetRelais(false)
-			o.SetLed(false)
+			goto applyOutput
 		}
 
 	}
+
+applyOutput:
+
+	hasError := FlagIsUIConnected&flags == 0
+
+	if hasError {
+		if lastLedToggleTime.Add(200 * time.Millisecond).Before(now) {
+			ledState = !ledState
+			lastLedToggleTime = now
+		}
+	} else {
+		ledState = false
+	}
+
+	ledEnabled := FlagIsEnabled&flags > 0 || ledState
+	relaisEnabled := FlagIsEnabled&flags > 0
+
+	o.SetLed(ledEnabled)
+	o.SetRelais(relaisEnabled)
+
+	goto loop
 }
 
 func setFlag(flag uint64) PiEvent {

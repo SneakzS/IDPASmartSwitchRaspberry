@@ -5,6 +5,7 @@
     "version": "0.2.0",
     "configurations": [
 
+
         {
             "name": "Launch Package",
             "type": "go",
@@ -31,7 +32,7 @@
             "cwd": ".",
             "args": [
                 "-action", "service",
-                "-service", "config.ini",
+                "-config", "config.ini",
                 "-service-mode", "client"
             ]
         },
@@ -45,7 +46,7 @@
             "cwd": ".",
             "args": [
                 "-action", "service",
-                "-service", "config.ini",
+                "-config", "config.ini",
                 "-service-mode", "server"
             ]
         }

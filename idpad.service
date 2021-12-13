@@ -1,0 +1,11 @@
+[Unit]
+Description=Our IDPA smart switch service
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi
+ExecStart=/home/pi/idpa_rpi -action service -config config.ini
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
