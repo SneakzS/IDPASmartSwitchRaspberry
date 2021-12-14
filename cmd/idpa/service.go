@@ -91,7 +91,7 @@ func runClient(cfg *simpleini.INI) error {
 	events := make(chan idpa.PiEvent, 64)
 
 	go idpa.RunPI(ctx, events, output)
-	go idpa.RunUIClient(ctx, events, idpa.UIConfig{
+	go idpa.RunUIClient(ctx, events, conn, idpa.UIConfig{
 		ServerURL:  uiServerURL,
 		ClientGUID: uiClientGUID,
 	})

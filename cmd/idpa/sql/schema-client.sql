@@ -8,7 +8,8 @@ CREATE TABLE WorkloadDefinition (
     hourFlags INTEGER NOT NULL,
     minuteFlags INTEGER NOT NULL,
     weekdayFlags INTEGER NOT NULL,
-    isEnabled BOOLEAN NOT NULL
+    isEnabled BOOLEAN NOT NULL,
+    description TEXT NOT NULL,
 );
 
 CREATE TABLE Workload (

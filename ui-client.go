@@ -2,7 +2,10 @@ package idpa
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"time"
 
@@ -14,7 +17,7 @@ type UIConfig struct {
 	ClientGUID string
 }
 
-func RunUIClient(ctx context.Context, events chan<- PiEvent, c UIConfig) {
+func RunUIClient(ctx context.Context, events chan<- PiEvent, sqlConn *sql.DB, c UIConfig) {
 	dialer := websocket.Dialer{}
 
 	for {
@@ -34,10 +37,11 @@ func RunUIClient(ctx context.Context, events chan<- PiEvent, c UIConfig) {
 
 	recevie:
 		for {
-
 			msgType, msg, err := conn.ReadMessage()
 			if err != nil {
-				if err == context.Canceled {
+				fmt.Println("ReadMessage returned, error is ", err)
+				var errClose *websocket.CloseError
+				if errors.As(err, &errClose) {
 					return
 				}
 
@@ -56,7 +60,7 @@ func RunUIClient(ctx context.Context, events chan<- PiEvent, c UIConfig) {
 					continue recevie
 				}
 
-				err = handleUIMessage(events, &parsedMessage)
+				err = handleUIMessage(events, &parsedMessage, sqlConn)
 				if err != nil {
 					log.Println(err)
 					continue recevie
@@ -92,10 +96,44 @@ func sendHeloMessage(c *websocket.Conn, clientGUID string) error {
 	return c.WriteMessage(websocket.TextMessage, data)
 }
 
-func handleUIMessage(events chan<- PiEvent, msg *UIMessage) error {
+func handleUIMessage(events chan<- PiEvent, msg *UIMessage, conn *sql.DB) error {
 	switch msg.ActionID {
 	case ActionSetFlags:
 		events <- PiEvent{EventID: EventSetFlags, Flags: msg.Flags, FlagMask: msg.FlagMask}
+	case ActionSetWorkloadDefinition:
+		def := msg.WorkloadDefinition
+		tx, err := conn.Begin()
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+
+		if def.WorkloadDefinitionID == 0 {
+			_, err := CreateWorkloadDefinition(tx, def)
+			if err != nil {
+				return err
+			}
+		} else {
+			err := UpdateWorkloadDefinition(tx, def)
+			if err != nil {
+				return err
+			}
+		}
+
+		return tx.Commit()
+
+	case ActionDeleteWorkloadDefinition:
+		tx, err := conn.Begin()
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+
+		err = DeleteWorkloadDefinition(tx, msg.WorkloadDefinition.WorkloadDefinitionID)
+		if err != nil {
+			return err
+		}
+		return tx.Commit()
 	}
 
 	return nil

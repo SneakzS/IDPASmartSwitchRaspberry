@@ -15,12 +15,12 @@ const (
 )
 
 const (
-	ActionSetWorkload    = 1
-	ActionGetWorkload    = 2
-	ActionDeleteWorkload = 3
-	ActionSetFlags       = 4
-	ActionGetFlags       = 5
-	ActionHelo           = 6
+	ActionSetWorkloadDefinition    = 1
+	ActionGetWorkloadDefinition    = 2
+	ActionDeleteWorkloadDefinition = 3
+	ActionSetFlags                 = 4
+	ActionGetFlags                 = 5
+	ActionHelo                     = 6
 )
 
 const (
@@ -56,7 +56,8 @@ type ProviderMessage struct {
 }
 
 type WorkloadDefinition struct {
-	WorkloadDefinitionID int32         `json:"workloadPlanId"`
+	WorkloadDefinitionID int32         `json:"workloadDefinitionId"`
+	Description          string        `json:"description"`
 	WorkloadW            int32         `json:"workloadW"`
 	DurationM            int32         `json:"durationM"`
 	ToleranceDurationM   int32         `json:"toleranceDurationM"`

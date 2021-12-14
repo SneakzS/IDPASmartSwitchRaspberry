@@ -21,11 +21,11 @@ const (
 )
 
 type RepeatPattern struct {
-	MonthFlags   uint16
-	DayFlags     uint32
-	HourFlags    uint32
-	MinuteFlags  uint64
-	WeekdayFlags uint8
+	MonthFlags   uint16 `json:"monthFlags"`
+	DayFlags     uint32 `json:"dayFlags"`
+	HourFlags    uint32 `json:"hourFlags"`
+	MinuteFlags  uint64 `json:"minuteFlags"`
+	WeekdayFlags uint8  `json:"weekdayFlags"`
 }
 
 func (rp RepeatPattern) Matches(t time.Time) bool {

@@ -127,7 +127,7 @@ func AddWireWorkload(tx *sql.Tx, wireID int32, startTime time.Time, durationM, w
 func GetWorkloadDefinitions(tx *sql.Tx) ([]WorkloadDefinition, error) {
 	res, err := tx.Query(
 		`SELECT workloadDefinitionID, workloadW, durationM, toleranceDurationM, monthFlags, 
-		dayFlags, hourFlags, minuteFlags, weekdayFlags, isEnabled
+		dayFlags, hourFlags, minuteFlags, weekdayFlags, isEnabled, description
 		FROM WorkloadDefinition`,
 	)
 	if err != nil {
@@ -143,7 +143,7 @@ func GetWorkloadDefinitions(tx *sql.Tx) ([]WorkloadDefinition, error) {
 	for res.Next() {
 		err = res.Scan(&w.WorkloadDefinitionID, &w.WorkloadW, &w.DurationM, &w.ToleranceDurationM,
 			&w.RepeatPattern.MonthFlags, &w.RepeatPattern.DayFlags, &w.RepeatPattern.HourFlags, &w.RepeatPattern.MinuteFlags, &w.RepeatPattern.WeekdayFlags,
-			&w.IsEnabled)
+			&w.IsEnabled, &w.Description)
 		if err != nil {
 			return definitions, err
 		}
@@ -152,6 +152,52 @@ func GetWorkloadDefinitions(tx *sql.Tx) ([]WorkloadDefinition, error) {
 	}
 
 	return definitions, nil
+}
+
+func CreateWorkloadDefinition(tx *sql.Tx, d WorkloadDefinition) (int32, error) {
+	p := d.RepeatPattern
+	res, err := tx.Exec(
+		`INSERT INTO WorkloadDefinition VALUES
+		(NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		d.WorkloadW, d.DurationM, d.ToleranceDurationM,
+		p.MonthFlags, p.DayFlags, p.HourFlags, p.MinuteFlags,
+		p.WeekdayFlags, d.IsEnabled, d.Description,
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+
+	return int32(id), nil
+}
+
+func UpdateWorkloadDefinition(tx *sql.Tx, d WorkloadDefinition) error {
+	p := d.RepeatPattern
+	_, err := tx.Exec(
+		`UPDATE WorkloadDefinition SET 
+		workloadW = ?, durationM = ?,
+		toleranceDurationM = ?, monthFlags = ?,
+		dayFlags = ?, hourFlags = ?,
+		minuteFlags = ?, weekdayFlags = ?,
+		isEnabled = ?, description = ?
+		WHERE workloadDefinitionID = ?`,
+		d.WorkloadW, d.DurationM,
+		d.ToleranceDurationM, p.MonthFlags,
+		p.DayFlags, p.HourFlags,
+		p.MinuteFlags, p.WeekdayFlags,
+		d.IsEnabled, d.Description,
+		d.WorkloadDefinitionID,
+	)
+	return err
+}
+
+func DeleteWorkloadDefinition(tx *sql.Tx, workloadDefinitionID int32) error {
+	_, err := tx.Exec("DELETE FROM WorkloadDefinition WHERE workloadDefinitionID = ?", workloadDefinitionID)
+	return err
 }
 
 type WorkloadSample struct {
