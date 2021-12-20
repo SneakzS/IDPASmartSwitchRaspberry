@@ -2,41 +2,45 @@ package main
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/philip-s/idpa"
 )
 
-type consolePi struct {
-	ledState    bool
-	relaisState bool
+type consolePiPin struct {
+	mask  uint
+	name  string
+	state bool
 }
+
+// make it global because gpio pins are global as well
+var consolePiPins = []consolePiPin{
+	{idpa.OutLed1, "led 1", false},
+	{idpa.OutLed2, "led 2", false},
+	{idpa.OutLed3, "led 3", false},
+	{idpa.OutRelais, "relais", false},
+}
+
+func (c *consolePiPin) Set(out uint) {
+	if out&c.mask > 0 {
+		if !c.state {
+			fmt.Println("turn on ", c.name)
+			c.state = true
+		}
+	} else {
+		if c.state {
+			fmt.Println("turn of ", c.name)
+			c.state = false
+		}
+	}
+}
+
+type consolePi struct{}
 
 // consolePi must implement idpa.PiOutput
 var _ idpa.PiOutput = &consolePi{}
 
-func (m *consolePi) SetLed(on bool) {
-	if on != m.ledState {
-		timestamp := time.Now().Format("2006-01-02 15:04:05")
-		if on {
-			fmt.Println(timestamp, ": turn on led")
-		} else {
-			fmt.Println(timestamp, ": turn off led")
-		}
+func (consolePi) Set(out uint) {
+	for i := range consolePiPins {
+		consolePiPins[i].Set(out)
 	}
-
-	m.ledState = on
-}
-
-func (m *consolePi) SetRelais(on bool) {
-	if on != m.relaisState {
-		timestamp := time.Now().Format("2006-01-02 15:04:05")
-		if on {
-			fmt.Println(timestamp, ": turn on relais")
-		} else {
-			fmt.Println(timestamp, ": turn off relais")
-		}
-	}
-
-	m.relaisState = on
 }

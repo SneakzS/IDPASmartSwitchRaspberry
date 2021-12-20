@@ -19,19 +19,26 @@ type PiEvent struct {
 	Samples  []WorkloadSample
 }
 
+const (
+	OutLed1 = 1 << iota
+	OutLed2
+	OutLed3
+	OutRelais
+)
+
 type PiOutput interface {
-	SetLed(on bool)
-	SetRelais(on bool)
+	Set(state uint)
 }
 
 // RunPI listens for events on the events chan and processes them accordingly
 func RunPI(ctx context.Context, events <-chan PiEvent, o PiOutput) {
 	var (
 		flags             uint64
-		ledState          bool
 		lastLedToggleTime time.Time
 		now               time.Time
 		sampleMap         map[int64]WorkloadSample
+		blink             bool
+		out               uint
 	)
 
 	ticker := time.NewTicker(50 * time.Millisecond)
@@ -88,22 +95,45 @@ loop:
 
 applyOutput:
 
-	hasError := FlagIsUIConnected&flags == 0
-
-	if hasError {
-		if lastLedToggleTime.Add(200 * time.Millisecond).Before(now) {
-			ledState = !ledState
-			lastLedToggleTime = now
-		}
+	// if output is enabled, enable the relais and led 1
+	if flags&FlagIsEnabled > 0 {
+		out = setOut(out, OutLed1|OutRelais)
 	} else {
-		ledState = false
+		out = clearOut(out, OutLed1|OutRelais)
 	}
 
-	ledEnabled := FlagIsEnabled&flags > 0 || ledState
-	relaisEnabled := FlagIsEnabled&flags > 0
+	// if FlagIsUIConnected or FlagProviderClientOK ist cleared
+	// toggle blink every 200 ms
+	if flags&FlagIsUIConnected == 0 || flags&FlagProviderClientOK == 0 {
+		if lastLedToggleTime.Add(200 * time.Millisecond).Before(now) {
+			blink = !blink
+			lastLedToggleTime = now
+		}
+	}
 
-	o.SetLed(ledEnabled)
-	o.SetRelais(relaisEnabled)
+	// blink led 2 if the ui is not connected
+	if flags&FlagIsUIConnected == 0 {
+		if blink {
+			out = setOut(out, OutLed2)
+		} else {
+			out = clearOut(out, OutLed2)
+		}
+	} else {
+		out = clearOut(out, OutLed2)
+	}
+
+	// blink led 3 if the provider returned an error
+	if flags&FlagProviderClientOK == 0 {
+		if blink {
+			out = setOut(out, OutLed3)
+		} else {
+			out = clearOut(out, OutLed3)
+		}
+	} else {
+		out = clearOut(out, OutLed3)
+	}
+
+	o.Set(out)
 
 	goto loop
 }
@@ -114,4 +144,12 @@ func setFlag(flag uint64) PiEvent {
 
 func clearFlag(flag uint64) PiEvent {
 	return PiEvent{EventID: EventSetFlags, Flags: 0, FlagMask: flag}
+}
+
+func setOut(out, f uint) uint {
+	return out | f
+}
+
+func clearOut(out, f uint) uint {
+	return out & (^f)
 }

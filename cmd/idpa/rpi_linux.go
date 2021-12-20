@@ -8,40 +8,43 @@ import (
 	"github.com/stianeikeland/go-rpio"
 )
 
-type raspberryPi struct {
-	ledPin    rpio.Pin
-	relaisPin rpio.Pin
+var (
+	led1Pin   = rpio.Pin(18)
+	led2Pin   = rpio.Pin(22)
+	led3Pin   = rpio.Pin(23)
+	relaisPin = rpio.Pin(17)
+)
+
+type raspberryPi struct{}
+
+func applyFlagToPin(pin rpio.Pin, mask, out uint) {
+	if out&mask > 0 {
+		pin.High()
+	} else {
+		pin.Low()
+	}
 }
 
-var raspberryPiTemplate = raspberryPi{
-	ledPin:    rpio.Pin(18),
-	relaisPin: rpio.Pin(17),
+func (raspberryPi) Set(out uint) {
+	applyFlagToPin(led1Pin, idpa.OutLed1, out)
+	applyFlagToPin(led2Pin, idpa.OutLed2, out)
+	applyFlagToPin(led3Pin, idpa.OutLed3, out)
+	applyFlagToPin(relaisPin, idpa.OutRelais, ^out) // relais is active low
 }
 
 // ensure that raspberryPi implements idpa.PiOutput
 var _ idpa.PiOutput = raspberryPi{}
 
-func (rpi raspberryPi) setupGPIO() {
-	rpi.ledPin.Output()
-	rpi.relaisPin.Output()
-	rpi.ledPin.Low()
-	rpi.relaisPin.Low()
-}
+func setupGPIO() {
+	led1Pin.Output()
+	led2Pin.Output()
+	led3Pin.Output()
+	relaisPin.Output()
 
-func (rpi raspberryPi) SetLed(on bool) {
-	if on {
-		rpi.ledPin.High()
-	} else {
-		rpi.ledPin.Low()
-	}
-}
-
-func (rpi raspberryPi) SetRelais(on bool) {
-	if on {
-		rpi.relaisPin.Low() // relais is active low
-	} else {
-		rpi.relaisPin.High()
-	}
+	led1Pin.Low()
+	led2Pin.Low()
+	led3Pin.Low()
+	relaisPin.High() // relais is active low
 }
 
 func setupRPI() (idpa.PiOutput, error) {
@@ -50,12 +53,11 @@ func setupRPI() (idpa.PiOutput, error) {
 		return nil, err
 	}
 
-	rpi := raspberryPiTemplate
-	rpi.setupGPIO()
+	setupGPIO()
 
-	return rpi, nil
+	return raspberryPi{}, nil
 }
 
-func closeRPI() {
-	rpio.Close()
+func closeRPI() error {
+	return rpio.Close()
 }
