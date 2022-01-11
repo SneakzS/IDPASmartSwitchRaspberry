@@ -3,13 +3,19 @@ CREATE TABLE WorkloadDefinition (
     workloadW INTEGER NOT NULL,
     durationM INTEGER NOT NULL,
     toleranceDurationM INTEGER NOT NULL,
+    isEnabled BOOLEAN NOT NULL,
+    description TEXT NOT NULL,
+    expiryDate TEXT NOT NULL
+);
+
+CREATE TABLE TimePattern (
+    workloadDefinitionID INTEGER NOT NULL,
     monthFlags INTEGER NOT NULL,
     dayFlags INTEGER NOT NULL,
     hourFlags INTEGER NOT NULL,
     minuteFlags INTEGER NOT NULL,
     weekdayFlags INTEGER NOT NULL,
-    isEnabled BOOLEAN NOT NULL,
-    description TEXT NOT NULL,
+    FOREIGN KEY (workloadDefinitionID) REFERENCES WorkloadDefinition(workloadDefinitionID) ON DELETE CASCADE
 );
 
 CREATE TABLE Workload (

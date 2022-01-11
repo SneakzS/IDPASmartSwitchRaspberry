@@ -6,11 +6,9 @@ package main
 
 import (
 	"os"
-
-	"github.com/philip-s/idpa"
 )
 
-func setupRPI() (idpa.PiOutput, error) {
+func setupRPI() (piOutput, error) {
 	return nil, os.ErrNotExist
 }
 

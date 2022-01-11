@@ -7,7 +7,7 @@ import (
 )
 
 type consolePiPin struct {
-	mask  uint
+	mask  uint32
 	name  string
 	state bool
 }
@@ -20,7 +20,7 @@ var consolePiPins = []consolePiPin{
 	{idpa.OutRelais, "relais", false},
 }
 
-func (c *consolePiPin) Set(out uint) {
+func (c *consolePiPin) write(out uint32) {
 	if out&c.mask > 0 {
 		if !c.state {
 			fmt.Println("turn on ", c.name)
@@ -36,11 +36,10 @@ func (c *consolePiPin) Set(out uint) {
 
 type consolePi struct{}
 
-// consolePi must implement idpa.PiOutput
-var _ idpa.PiOutput = &consolePi{}
+var _ piOutput = consolePi{}
 
-func (consolePi) Set(out uint) {
+func (consolePi) write(out uint32) {
 	for i := range consolePiPins {
-		consolePiPins[i].Set(out)
+		consolePiPins[i].write(out)
 	}
 }

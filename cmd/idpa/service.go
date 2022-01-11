@@ -34,12 +34,18 @@ func runService() error {
 	}
 }
 
+type piOutput interface {
+	write(uint32)
+}
+
 func runClient(cfg *simpleini.INI) error {
-	var output idpa.PiOutput
 	outputStr, err := cfg.GetString("Client", "output")
 	if err != nil {
 		return err
 	}
+
+	var output piOutput
+
 	switch outputStr {
 	case "rpi":
 		output, err = setupRPI()
@@ -88,20 +94,29 @@ func runClient(cfg *simpleini.INI) error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	events := make(chan idpa.PiEvent, 64)
 
-	go idpa.RunPI(ctx, events, output)
-	go idpa.RunUIClient(ctx, events, conn, idpa.UIConfig{
+	outChan := make(chan uint32)
+
+	pi := idpa.NewPI(outChan)
+
+	go idpa.RunUIClient(ctx, pi, conn, idpa.UIConfig{
 		ServerURL:  uiServerURL,
 		ClientGUID: uiClientGUID,
 	})
-	go idpa.RunProviderClient(ctx, events, conn, providerServerURL, int32(customerID))
+	go idpa.RunProviderClient(ctx, pi, conn, providerServerURL, int32(customerID))
 
 	// Wait for SIGINT to quit
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt)
-	<-done
-	return nil
+
+	for {
+		select {
+		case q := <-outChan:
+			output.write(q)
+		case <-done:
+			return nil
+		}
+	}
 }
 
 func runServer(cfg *simpleini.INI) error {

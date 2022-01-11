@@ -126,8 +126,8 @@ func AddWireWorkload(tx *sql.Tx, wireID int32, startTime time.Time, durationM, w
 
 func GetWorkloadDefinitions(tx *sql.Tx) ([]WorkloadDefinition, error) {
 	res, err := tx.Query(
-		`SELECT workloadDefinitionID, workloadW, durationM, toleranceDurationM, monthFlags, 
-		dayFlags, hourFlags, minuteFlags, weekdayFlags, isEnabled, description
+		`SELECT workloadDefinitionID, workloadW, durationM, 
+		toleranceDurationM, isEnabled, description, datetime(expiryDate)
 		FROM WorkloadDefinition`,
 	)
 	if err != nil {
@@ -141,9 +141,9 @@ func GetWorkloadDefinitions(tx *sql.Tx) ([]WorkloadDefinition, error) {
 	)
 
 	for res.Next() {
-		err = res.Scan(&w.WorkloadDefinitionID, &w.WorkloadW, &w.DurationM, &w.ToleranceDurationM,
-			&w.RepeatPattern.MonthFlags, &w.RepeatPattern.DayFlags, &w.RepeatPattern.HourFlags, &w.RepeatPattern.MinuteFlags, &w.RepeatPattern.WeekdayFlags,
-			&w.IsEnabled, &w.Description)
+		err = res.Scan(
+			&w.WorkloadDefinitionID, &w.WorkloadW, &w.DurationM, &w.ToleranceDurationM,
+			&w.IsEnabled, &w.Description, &w.ExpiryDate)
 		if err != nil {
 			return definitions, err
 		}
@@ -151,17 +151,36 @@ func GetWorkloadDefinitions(tx *sql.Tx) ([]WorkloadDefinition, error) {
 		definitions = append(definitions, w)
 	}
 
+	// get all the time patterns
+	for i := range definitions {
+		d := &definitions[i]
+
+		res, err = tx.Query(
+			`SELECT monthFlags, dayFlags, hourFlags, 
+			minuteFlags, weekdayFlags FROM TimePattern 
+			WHERE workloadDefinitionID = ?`, d.WorkloadDefinitionID,
+		)
+		if err != nil {
+			return definitions, err
+		}
+
+		for res.Next() {
+			var rp RepeatPattern
+			err = res.Scan(&rp.MonthFlags, &rp.DayFlags, &rp.HourFlags, &rp.MinuteFlags, &rp.WeekdayFlags)
+			if err != nil {
+				return definitions, err
+			}
+		}
+	}
+
 	return definitions, nil
 }
 
 func CreateWorkloadDefinition(tx *sql.Tx, d WorkloadDefinition) (int32, error) {
-	p := d.RepeatPattern
 	res, err := tx.Exec(
 		`INSERT INTO WorkloadDefinition VALUES
-		(NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		d.WorkloadW, d.DurationM, d.ToleranceDurationM,
-		p.MonthFlags, p.DayFlags, p.HourFlags, p.MinuteFlags,
-		p.WeekdayFlags, d.IsEnabled, d.Description,
+		(NULL, ?, ?, ?, ?, ?, datetime(?))`,
+		d.WorkloadW, d.DurationM, d.ToleranceDurationM, d.IsEnabled, d.Description, d.ExpiryDate,
 	)
 	if err != nil {
 		return 0, err
@@ -172,27 +191,48 @@ func CreateWorkloadDefinition(tx *sql.Tx, d WorkloadDefinition) (int32, error) {
 		return 0, err
 	}
 
+	for _, p := range d.RepeatPattern {
+		_, err = tx.Exec(`INSERT INTO TimePattern VALUES(?, ?, ?, ?, ?, ?)`, id,
+			p.MonthFlags, p.DayFlags, p.HourFlags, p.MinuteFlags, p.WeekdayFlags)
+	}
+
 	return int32(id), nil
 }
 
 func UpdateWorkloadDefinition(tx *sql.Tx, d WorkloadDefinition) error {
-	p := d.RepeatPattern
 	_, err := tx.Exec(
 		`UPDATE WorkloadDefinition SET 
 		workloadW = ?, durationM = ?,
-		toleranceDurationM = ?, monthFlags = ?,
-		dayFlags = ?, hourFlags = ?,
-		minuteFlags = ?, weekdayFlags = ?,
+		toleranceDurationM = ?,
 		isEnabled = ?, description = ?
 		WHERE workloadDefinitionID = ?`,
 		d.WorkloadW, d.DurationM,
-		d.ToleranceDurationM, p.MonthFlags,
-		p.DayFlags, p.HourFlags,
-		p.MinuteFlags, p.WeekdayFlags,
+		d.ToleranceDurationM,
 		d.IsEnabled, d.Description,
 		d.WorkloadDefinitionID,
 	)
-	return err
+
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec("DELETE FROM TimePattern WHERE workloadDefinitionID = ?", d.WorkloadDefinitionID)
+	if err != nil {
+		return err
+	}
+
+	for _, p := range d.RepeatPattern {
+		_, err = tx.Exec(`INSERT INTO TimePattern VALUES (?, ?, ?, ?, ?, ?)`,
+			d.WorkloadDefinitionID, p.MonthFlags,
+			p.DayFlags, p.HourFlags,
+			p.MinuteFlags, p.WeekdayFlags,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func DeleteWorkloadDefinition(tx *sql.Tx, workloadDefinitionID int32) error {

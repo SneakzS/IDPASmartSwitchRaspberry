@@ -10,10 +10,12 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func RunProviderClient(ctx context.Context, events chan<- PiEvent, conn *sql.DB, serverURL string, customerID int32) {
-	ticker := time.NewTicker(10 * time.Second)
+func RunProviderClient(ctx context.Context, pi *Pi, conn *sql.DB, serverURL string, customerID int32) {
+	ticker := time.NewTicker(time.Second)
 	var (
-		now time.Time
+		now              time.Time
+		lastSampleUpdate time.Time
+		sampleMap        map[int64]WorkloadSample
 	)
 
 	for {
@@ -22,19 +24,35 @@ func RunProviderClient(ctx context.Context, events chan<- PiEvent, conn *sql.DB,
 			return
 
 		case now = <-ticker.C:
-			wls, err := updateProviderClient(now, conn, serverURL, customerID)
-			if err != nil {
-				log.Println(err)
-				events <- clearFlag(FlagProviderClientOK)
-				continue
+			if lastSampleUpdate.Add(time.Minute).Before(now) {
+				wls, err := updateProviderClient(now, conn, serverURL, customerID)
+				if err != nil {
+					log.Println(err)
+					pi.SetFlags(0, FlagProviderClientOK)
+					continue
+				}
+
+				sampleMap = make(map[int64]WorkloadSample)
+				for _, sample := range wls {
+					sampleMap[sample.SampleTime.Unix()] = sample
+				}
 			}
 
-			events <- PiEvent{
-				EventID: EventSetWorkloads,
-				Samples: wls,
-			}
+			// if no specific output is enforced, check if we have an active workflow
+			// and act acordingly
 
-			events <- setFlag(FlagProviderClientOK)
+			flags := pi.Flags()
+
+			if flags&FlagEnforce == 0 {
+				nowTC := now.Truncate(time.Minute)
+				sample := sampleMap[nowTC.Unix()]
+
+				if sample.OutputEnabled {
+					pi.SetFlags(FlagIsEnabled, FlagIsEnabled)
+				} else {
+					pi.SetFlags(0, FlagIsEnabled)
+				}
+			}
 		}
 	}
 }
@@ -150,12 +168,17 @@ func PlanWorloads(definitions []WorkloadDefinition, startTime time.Time, duratio
 	for i := int32(0); i < durationM; i++ {
 		t := startTime.Add(time.Duration(i) * time.Minute)
 		for _, d := range definitions {
-			if d.IsEnabled && d.RepeatPattern.Matches(t) {
-
-				planned = append(planned, PlannedWorkload{
-					Definition: d,
-					MatchTime:  t,
-				})
+			if d.IsEnabled {
+				// one of the repeat patterns must match
+				for _, rp := range d.RepeatPattern {
+					if rp.Matches(t) {
+						planned = append(planned, PlannedWorkload{
+							Definition: d,
+							MatchTime:  t,
+						})
+						break
+					}
+				}
 			}
 		}
 	}

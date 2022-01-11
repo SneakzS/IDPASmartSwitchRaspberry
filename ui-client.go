@@ -17,7 +17,7 @@ type UIConfig struct {
 	ClientGUID string
 }
 
-func RunUIClient(ctx context.Context, events chan<- PiEvent, sqlConn *sql.DB, c UIConfig) {
+func RunUIClient(ctx context.Context, pi *Pi, sqlConn *sql.DB, c UIConfig) {
 	dialer := websocket.Dialer{}
 
 	for {
@@ -33,7 +33,7 @@ func RunUIClient(ctx context.Context, events chan<- PiEvent, sqlConn *sql.DB, c 
 		}
 
 		log.Println("connected to " + c.ServerURL)
-		events <- setFlag(FlagIsUIConnected)
+		pi.SetFlags(FlagIsUIConnected, FlagIsUIConnected)
 
 	recevie:
 		for {
@@ -60,7 +60,7 @@ func RunUIClient(ctx context.Context, events chan<- PiEvent, sqlConn *sql.DB, c 
 					continue recevie
 				}
 
-				err = handleUIMessage(events, &parsedMessage, sqlConn)
+				err = handleUIMessage(pi, &parsedMessage, sqlConn)
 				if err != nil {
 					log.Println(err)
 					continue recevie
@@ -76,7 +76,7 @@ func RunUIClient(ctx context.Context, events chan<- PiEvent, sqlConn *sql.DB, c 
 		if conn != nil {
 			conn.Close()
 		}
-		events <- clearFlag(FlagIsUIConnected)
+		pi.SetFlags(0, FlagIsUIConnected)
 		time.Sleep(5 * time.Second)
 	}
 
@@ -96,10 +96,10 @@ func sendHeloMessage(c *websocket.Conn, clientGUID string) error {
 	return c.WriteMessage(websocket.TextMessage, data)
 }
 
-func handleUIMessage(events chan<- PiEvent, msg *UIMessage, conn *sql.DB) error {
+func handleUIMessage(pi *Pi, msg *UIMessage, conn *sql.DB) error {
 	switch msg.ActionID {
 	case ActionSetFlags:
-		events <- PiEvent{EventID: EventSetFlags, Flags: msg.Flags, FlagMask: msg.FlagMask}
+		pi.SetFlags(msg.Flags, uint32(msg.FlagMask))
 	case ActionSetWorkloadDefinition:
 		def := msg.WorkloadDefinition
 		tx, err := conn.Begin()

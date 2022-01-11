@@ -17,7 +17,7 @@ var (
 
 type raspberryPi struct{}
 
-func applyFlagToPin(pin rpio.Pin, mask, out uint) {
+func applyFlagToPin(pin rpio.Pin, mask, out uint32) {
 	if out&mask > 0 {
 		pin.High()
 	} else {
@@ -25,15 +25,12 @@ func applyFlagToPin(pin rpio.Pin, mask, out uint) {
 	}
 }
 
-func (raspberryPi) Set(out uint) {
+func (raspberryPi) write(out uint32) {
 	applyFlagToPin(led1Pin, idpa.OutLed1, out)
 	applyFlagToPin(led2Pin, idpa.OutLed2, out)
 	applyFlagToPin(led3Pin, idpa.OutLed3, out)
 	applyFlagToPin(relaisPin, idpa.OutRelais, ^out) // relais is active low
 }
-
-// ensure that raspberryPi implements idpa.PiOutput
-var _ idpa.PiOutput = raspberryPi{}
 
 func setupGPIO() {
 	led1Pin.Output()
@@ -47,10 +44,10 @@ func setupGPIO() {
 	relaisPin.High() // relais is active low
 }
 
-func setupRPI() (idpa.PiOutput, error) {
+func setupRPI() (raspberryPi, error) {
 	err := rpio.Open()
 	if err != nil {
-		return nil, err
+		return raspberryPi{}, err
 	}
 
 	setupGPIO()

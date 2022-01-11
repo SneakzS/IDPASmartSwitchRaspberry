@@ -1,155 +1,109 @@
 package idpa
 
 import (
-	"context"
-	"fmt"
+	"sync"
 	"time"
 )
 
-const (
-	_ = iota
-	EventSetFlags
-	EventSetWorkloads
-)
+type Pi struct {
+	mux     sync.Mutex
+	flags   uint32
+	output  uint32
+	outChan chan<- uint32
+	done    chan struct{}
+}
 
-type PiEvent struct {
-	EventID  int
-	Flags    uint64
-	FlagMask uint64
-	Samples  []WorkloadSample
+func (pi *Pi) SetFlags(flags, mask uint32) {
+	pi.mux.Lock()
+	defer pi.mux.Unlock()
+
+	newFlags := flags & mask
+	newFlags = newFlags | (pi.flags & ^mask)
+	pi.flags = newFlags
+
+	if newFlags&FlagIsEnabled > 0 {
+		pi.setOutput(OutRelais|OutLed1, OutRelais|OutLed1)
+	} else {
+		pi.setOutput(0, OutRelais|OutLed1)
+	}
+}
+
+func (pi *Pi) setOutput(output, mask uint32) {
+	newOutput := output & mask
+	newOutput = newOutput | (pi.output & ^mask)
+	pi.output = newOutput
+
+	pi.outChan <- newOutput
+}
+
+func (pi *Pi) SetOutput(output, mask uint32) {
+	pi.mux.Lock()
+	defer pi.mux.Unlock()
+	pi.setOutput(output, mask)
+}
+
+func (pi *Pi) Flags() uint32 {
+	pi.mux.Lock()
+	defer pi.mux.Unlock()
+
+	return pi.flags
 }
 
 const (
-	OutLed1 = 1 << iota
-	OutLed2
-	OutLed3
+	OutLed1 = 1 << iota // on / off indicator
+	OutLed2             // blinks when UI is not connected
+	OutLed3             // blinks when operator client failed
 	OutRelais
 )
 
-type PiOutput interface {
-	Set(state uint)
-}
+func NewPI(output chan<- uint32) *Pi {
+	done := make(chan struct{})
+	pi := Pi{
+		outChan: output,
+		done:    done,
+	}
 
-// RunPI listens for events on the events chan and processes them accordingly
-func RunPI(ctx context.Context, events <-chan PiEvent, o PiOutput) {
-	var (
-		flags             uint64
-		lastLedToggleTime time.Time
-		now               time.Time
-		sampleMap         map[int64]WorkloadSample
-		blink             bool
-		out               uint
-	)
+	// blink the leds
+	go func() {
+		ticker := time.NewTicker(200 * time.Millisecond)
 
-	ticker := time.NewTicker(50 * time.Millisecond)
-	defer ticker.Stop()
+		var led2, led3 bool
 
-loop:
-	for {
-		select {
-		case <-ctx.Done():
-			// the context is done
-			return
-		case ev := <-events:
-			// An event occured
-			switch ev.EventID {
-			case EventSetFlags:
-				// flip the mask so that every bit that we don't care is 1
-				mask := ^ev.FlagMask
-				flags = (flags & mask) | ev.Flags
-
-				fmt.Printf("new flags received: 0b%b\n", flags)
-
-				now = time.Now()
-				goto applyOutput
-
-			case EventSetWorkloads:
-				sampleMap = make(map[int64]WorkloadSample)
-				for _, sample := range ev.Samples {
-					sampleMap[sample.SampleTime.Unix()] = sample
-				}
-
-				now = time.Now()
-				goto applyOutput
-			}
-
-		case now = <-ticker.C:
-			// The time was updated
-
-			// if no specific output is enforced, check if we have an active workflow
-			// and act acordingly
-			if flags&FlagEnforce == 0 {
-				nowTC := now.Truncate(time.Minute)
-				sample := sampleMap[nowTC.Unix()]
-
-				if sample.OutputEnabled {
-					flags = flags | FlagIsEnabled
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				flags := pi.Flags()
+				if flags&FlagIsUIConnected == 0 {
+					led2 = !led2
 				} else {
-					flags = flags & (^uint64(FlagIsEnabled))
+					led2 = false
 				}
+
+				if flags&FlagProviderClientOK == 0 {
+					led3 = !led3
+				} else {
+					led3 = false
+				}
+
+				var output uint32
+				if led2 {
+					output |= OutLed2
+				}
+
+				if led3 {
+					output |= OutLed3
+				}
+
+				pi.SetOutput(output, OutLed2|OutLed3)
 			}
-			goto applyOutput
 		}
+	}()
 
-	}
-
-applyOutput:
-
-	// if output is enabled, enable the relais and led 1
-	if flags&FlagIsEnabled > 0 {
-		out = setOut(out, OutLed1|OutRelais)
-	} else {
-		out = clearOut(out, OutLed1|OutRelais)
-	}
-
-	// if FlagIsUIConnected or FlagProviderClientOK ist cleared
-	// toggle blink every 200 ms
-	if flags&FlagIsUIConnected == 0 || flags&FlagProviderClientOK == 0 {
-		if lastLedToggleTime.Add(200 * time.Millisecond).Before(now) {
-			blink = !blink
-			lastLedToggleTime = now
-		}
-	}
-
-	// blink led 2 if the ui is not connected
-	if flags&FlagIsUIConnected == 0 {
-		if blink {
-			out = setOut(out, OutLed2)
-		} else {
-			out = clearOut(out, OutLed2)
-		}
-	} else {
-		out = clearOut(out, OutLed2)
-	}
-
-	// blink led 3 if the provider returned an error
-	if flags&FlagProviderClientOK == 0 {
-		if blink {
-			out = setOut(out, OutLed3)
-		} else {
-			out = clearOut(out, OutLed3)
-		}
-	} else {
-		out = clearOut(out, OutLed3)
-	}
-
-	o.Set(out)
-
-	goto loop
+	return &pi
 }
 
-func setFlag(flag uint64) PiEvent {
-	return PiEvent{EventID: EventSetFlags, Flags: flag, FlagMask: flag}
-}
-
-func clearFlag(flag uint64) PiEvent {
-	return PiEvent{EventID: EventSetFlags, Flags: 0, FlagMask: flag}
-}
-
-func setOut(out, f uint) uint {
-	return out | f
-}
-
-func clearOut(out, f uint) uint {
-	return out & (^f)
+func (pi *Pi) Close() {
+	close(pi.done)
 }
