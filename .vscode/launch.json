@@ -34,7 +34,6 @@
             "args": [
                 "-action", "service",
                 "-config", "config.ini",
-                "-service-mode", "client"
             ]
         },
 
@@ -43,12 +42,11 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "./cmd/idpa",
+            "program": "./cmd/idpaProvider",
             "cwd": ".",
             "args": [
                 "-action", "service",
                 "-config", "config.ini",
-                "-service-mode", "server"
             ]
         }
     ]

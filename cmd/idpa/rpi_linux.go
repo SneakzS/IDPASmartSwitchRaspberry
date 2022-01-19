@@ -5,7 +5,7 @@ package main
 
 import (
 	ina219 "github.com/JeffAlyanak/goina219"
-	"github.com/philip-s/idpa"
+	"github.com/philip-s/idpa/client"
 	"github.com/stianeikeland/go-rpio"
 )
 
@@ -14,25 +14,37 @@ var (
 	led2Pin   = rpio.Pin(20)
 	led3Pin   = rpio.Pin(21)
 	relaisPin = rpio.Pin(17)
+
+	sensor1 *ina219.INA219
 )
 
-type raspberryPi struct{}
-
-func applyFlagToPin(pin rpio.Pin, mask, out uint32) {
-	if out&mask > 0 {
-		pin.High()
-	} else {
-		pin.Low()
-	}
+func writeOutputRPI(o client.Output) {
+	writeBooltoPin(led1Pin, o.Led1)
+	writeBooltoPin(led2Pin, o.Led2)
+	writeBooltoPin(led3Pin, o.Led3)
+	writeBooltoPin(relaisPin, o.Relais)
 }
 
-func (raspberryPi) write(out uint32) {
-	// invert output because all outputs are active low
-	out = ^out
-	applyFlagToPin(led1Pin, idpa.OutLed1, out)
-	applyFlagToPin(led2Pin, idpa.OutLed2, out)
-	applyFlagToPin(led3Pin, idpa.OutLed3, out)
-	applyFlagToPin(relaisPin, idpa.OutRelais, out)
+func readInputRPI(inp *client.Input) error {
+	err := ina219.Read(sensor1)
+	if err != nil {
+		return err
+	}
+
+	inp.Power = sensor1.Power
+	inp.Current = sensor1.Current
+	inp.Voltage = sensor1.Bus
+	inp.Shunt = sensor1.Shunt
+
+	return nil
+}
+
+func writeBooltoPin(p rpio.Pin, b bool) {
+	if b {
+		p.Low() // all pins are active low
+	} else {
+		p.High()
+	}
 }
 
 func setupGPIO() {
@@ -48,24 +60,27 @@ func setupGPIO() {
 	relaisPin.High()
 }
 
-func setupRPI() (raspberryPi, error) {
+func setupRPI() error {
 	err := rpio.Open()
 	if err != nil {
-		return raspberryPi{}, err
+		return err
 	}
 
 	setupGPIO()
+	err = setupSensor1()
+	if err != nil {
+		rpio.Close()
+		return err
+	}
 
-	setupi2c()
-
-	return raspberryPi{}, nil
+	return nil
 }
 
 func closeRPI() error {
 	return rpio.Close()
 }
 
-func setupi2c() error {
+func setupSensor1() error {
 	config := ina219.Config(
 		ina219.Range32V,
 		ina219.Gain320MV,
@@ -74,7 +89,7 @@ func setupi2c() error {
 		ina219.ModeContinuous,
 	)
 
-	myINA219, err := ina219.New(
+	ina, err := ina219.New(
 		0x40, // ina219 address
 		0x00, // i2c bus
 		0.01, // Shunt resistance in ohms
@@ -84,4 +99,7 @@ func setupi2c() error {
 	if err != nil {
 		return err
 	}
+
+	sensor1 = ina
+	return nil
 }

@@ -33,6 +33,13 @@ CREATE TABLE Workload (
 CREATE TABLE WorkloadSample (
     sampleTime TIMESTAMP NOT NULL PRIMARY KEY,
     workloadID INTEGER NOT NULL,
-    measuredWorkloadW INTEGER NOT NULL,
     FOREIGN KEY (workloadID) REFERENCES Workload(workloadID)
+);
+
+CREATE TABLE SensorSample (
+    sampleTime TIMESTAMP NOT NULL PRIMARY KEY,
+    power FLOAT NOT NULL,
+    current FLOAT NOT NULL,
+    voltage FLOAT NOT NULL,
+    shunt FLOAT NOT NULL
 );

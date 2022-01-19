@@ -12,6 +12,6 @@ require (
 )
 
 require (
-	github.com/JeffAlyanak/goina219 v0.0.0-20200405172005-b806df94324c // indirect
+	github.com/JeffAlyanak/goina219 v0.0.0-20200405172005-b806df94324c 
 	github.com/NeuralSpaz/i2c v0.0.0-20170701141141-d67f8c39449f // indirect
 )

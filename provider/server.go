@@ -9,11 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
-	"github.com/philip-s/idpa"
+	"github.com/philip-s/idpa/common"
 )
 
-func HandleWorkloadRequest(q *WorkloadResponse, req *WorkloadRequest, db *sql.DB) error {
+func HandleWorkloadRequest(q *common.WorkloadResponse, req *common.WorkloadRequest, db *sql.DB) error {
 	//TODO: Verify signature
 
 	// begin a db transaction
@@ -43,164 +42,66 @@ func HandleWorkloadRequest(q *WorkloadResponse, req *WorkloadRequest, db *sql.DB
 		}
 	}
 
-	return nil
+	q.OffsetM = offsetM
+
+	return tx.Commit()
 }
 
-func RunServer(m *http.ServeMux, db *sql.DB) error {
-	mux := sync.Mutex{}
+func WorkloadRequestHandler(wr http.ResponseWriter, r *http.Request, db *sql.DB, mux *sync.Mutex) {
+	errStatus := 500
+	errMessage := "Internal Server Error"
 
-	m.HandleFunc("/request", func(wr http.ResponseWriter, r *http.Request) {
-		errStatus := 500
-		errMessage := "Internal Server Error"
+	wr.Header().Add("Content-Type", "application/json")
 
-		wr.Header().Add("Content-Type", "application/json")
-
-		switch r.Method {
-		case http.MethodPost:
-			body, err := ioutil.ReadAll(r.Body)
-			if err != nil {
-				log.Println(err)
-				goto sendError
-			}
-
-			req := WorkloadRequest{}
-
-			err = json.Unmarshal(body, &req)
-			if err != nil {
-				log.Println(err)
-				errStatus = http.StatusBadRequest
-				errMessage = "Bad Request"
-				goto sendError
-			}
-
-			mux.Lock()
-			defer mux.Unlock()
-
-			resp := WorkloadResponse{}
-			err = HandleWorkloadRequest(&resp, &req, db)
-			if err != nil {
-				if err == idpa.ErrWorkloadNotPossible {
-					errStatus = http.StatusConflict
-				}
-			}
-
-		default:
-			errStatus = http.StatusMethodNotAllowed
-			errMessage = "Method not allowed"
+	switch r.Method {
+	case http.MethodPost:
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			log.Println(err)
 			goto sendError
 		}
 
-	sendError:
-		resp := ErrorResponse{errMessage}
-		data, _ := json.Marshal(&resp)
-		wr.WriteHeader(errStatus)
-		wr.Write(data)
-	})
-}
+		req := common.WorkloadRequest{}
 
-func handleProviderServer(c *websocket.Conn, conn *sql.DB) error {
-
-	var (
-		state            int
-		msg              idpa.ProviderMessage
-		requestID        int32
-		customerID       int32
-		wires            []Wire
-		workloadPossible bool
-	)
-
-	for {
-		err := idpa.ReceiveProviderMessage(c, &msg)
+		err = json.Unmarshal(body, &req)
 		if err != nil {
-			return err
+			log.Println(err)
+			errStatus = http.StatusBadRequest
+			errMessage = "Bad Request"
+			goto sendError
 		}
 
-		if state > 0 && msg.RequestID != requestID {
-			return idpa.ErrInvalidMessage
-		}
+		mux.Lock()
+		defer mux.Unlock()
 
-		switch state {
-		case 0:
-			// we expect the initial request
-			if msg.MessageTypeID != idpa.MsgRequest {
-				return idpa.ErrInvalidMessage
-			}
-
-			requestID = msg.RequestID
-			customerID = msg.CustomerID
-
-			d := idpa.WorkloadDefinition{
-				WorkloadW:          msg.WorkloadW,
-				DurationM:          msg.DurationM,
-				ToleranceDurationM: msg.ToleranceDurationM,
-				IsEnabled:          true,
-			}
-
-			startTime := msg.StartTime
-
-			if err == idpa.ErrWorkloadNotPossible {
-				msg = idpa.ProviderMessage{
-					RequestID:     requestID,
-					MessageTypeID: idpa.MsgOffer,
-					Offers:        nil,
-				}
-			} else if err != nil {
-				return err
+		resp := common.WorkloadResponse{}
+		err = HandleWorkloadRequest(&resp, &req, db)
+		if err != nil {
+			if err == common.ErrWorkloadNotPossible {
+				errStatus = http.StatusConflict
+				errMessage = "Workload is not possible"
 			} else {
-				workloadPossible = true
-				msg = ProviderMessage{
-					RequestID:     msg.RequestID,
-					MessageTypeID: MsgOffer,
-					Offers: []Offer{{
-						OfferID:   1,
-						OffsetM:   offsetM,
-						WorkloadW: d.WorkloadW,
-						PriceCNT:  0,
-					}},
-				}
+				log.Println(err)
 			}
 
+			goto sendError
 		}
 
-	}
-
-	err = p.Send(&msg)
-	if err != nil {
-		return err
-	}
-
-	err = p.Receive(&msg, msg.RequestID)
-	if err != nil {
-		return err
-	}
-
-	switch msg.MessageTypeID {
-	case MsgDiscard:
-		msg = ProviderMessage{
-			RequestID:     msg.RequestID,
-			MessageTypeID: MsgAck,
-		}
-
-	case MsgSelect:
-		if msg.OfferID != 1 || !workloadPossible {
-			return ErrInvalidMessage
-		}
-
-		msg = ProviderMessage{
-			RequestID:     msg.RequestID,
-			MessageTypeID: MsgAck,
-			OfferID:       msg.OfferID,
-		}
+		// Write the response
+		data, _ := json.Marshal(&resp)
+		wr.WriteHeader(http.StatusOK)
+		wr.Write(data)
+		return
 
 	default:
-		return ErrInvalidMessage
+		errStatus = http.StatusMethodNotAllowed
+		errMessage = "Method not allowed"
+		goto sendError
 	}
 
-	err = tx.Commit()
-	if err != nil {
-		return err
-	}
-
-	err = p.Send(&msg)
-	return err
+sendError:
+	resp := common.ErrorResponse{Message: errMessage}
+	data, _ := json.Marshal(&resp)
+	wr.WriteHeader(errStatus)
+	wr.Write(data)
 }

@@ -1,7 +1,6 @@
-package idpa
+package client
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -9,39 +8,60 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/philip-s/idpa/common"
 )
 
-type UIConfig struct {
-	ServerURL  string
-	ClientGUID string
+type uiClientState struct {
+	IsOK          bool
+	EnforceOutput bool
+	EnableOutput  bool
 }
 
-func RunUIClient(ctx context.Context, pi *Pi, sqlConn *sql.DB, c UIConfig) {
-	messages := make(chan UIMessage, 1)
-	go fetchMessages(ctx, pi, c, messages)
+func runUIClient(stateChan chan<- uiClientState, sqlConn *sql.DB, c *Config, done <-chan struct{}) {
+	var (
+		currentState uiClientState
+		messages     = make(chan common.UIMessage, 1)
+		isOkChan     = make(chan bool, 1)
+	)
+
+	go fetchMessages(isOkChan, messages, c, done)
 
 	for {
+		newState := currentState
+
 		select {
-		case <-ctx.Done():
+		case <-done:
 			return
 
+		case isOk := <-isOkChan:
+			newState.IsOK = isOk
+
 		case msg := <-messages:
-			err := handleUIMessage(pi, &msg, sqlConn)
+			err := handleUIMessage(&newState, &msg, sqlConn)
 			if err != nil {
 				log.Println(err)
+				newState.IsOK = false
+			} else {
+				newState.IsOK = true
 			}
+
+		}
+
+		if newState != currentState {
+			stateChan <- newState
+			currentState = newState
 		}
 	}
 }
 
-func fetchMessages(ctx context.Context, pi *Pi, c UIConfig, messages chan<- UIMessage) {
+func fetchMessages(isOkChan chan<- bool, messages chan<- common.UIMessage, c *Config, done <-chan struct{}) {
 	var closing bool
 	var conn *websocket.Conn
 	var err error
 	var dialer websocket.Dialer
 
 	go func() {
-		<-ctx.Done()
+		<-done
 		closing = true
 
 		if conn != nil {
@@ -51,7 +71,7 @@ func fetchMessages(ctx context.Context, pi *Pi, c UIConfig, messages chan<- UIMe
 	}()
 
 	for {
-		conn, _, err = dialer.DialContext(ctx, c.ServerURL, nil)
+		conn, _, err = dialer.Dial(c.ServerURL, nil)
 		if err != nil {
 			goto handleError
 		}
@@ -62,7 +82,7 @@ func fetchMessages(ctx context.Context, pi *Pi, c UIConfig, messages chan<- UIMe
 		}
 
 		log.Println("connected to " + c.ServerURL)
-		pi.SetFlags(FlagIsUIConnected, FlagIsUIConnected)
+		isOkChan <- true
 
 	receive:
 		for {
@@ -76,7 +96,7 @@ func fetchMessages(ctx context.Context, pi *Pi, c UIConfig, messages chan<- UIMe
 			case websocket.BinaryMessage:
 
 			case websocket.TextMessage:
-				var parsedMessage UIMessage
+				var parsedMessage common.UIMessage
 				err := json.Unmarshal(msg, &parsedMessage)
 				if err != nil {
 					log.Println("Invalid message received", err)
@@ -97,14 +117,14 @@ func fetchMessages(ctx context.Context, pi *Pi, c UIConfig, messages chan<- UIMe
 		if conn != nil {
 			conn.Close()
 		}
-		pi.SetFlags(0, FlagIsUIConnected)
+		isOkChan <- false
 		time.Sleep(5 * time.Second)
 	}
 }
 
 func sendHeloMessage(c *websocket.Conn, clientGUID string) error {
-	msg := UIMessage{
-		ActionID:   ActionHelo,
+	msg := common.UIMessage{
+		ActionID:   common.ActionHelo,
 		ClientGUID: clientGUID,
 	}
 
@@ -116,11 +136,17 @@ func sendHeloMessage(c *websocket.Conn, clientGUID string) error {
 	return c.WriteMessage(websocket.TextMessage, data)
 }
 
-func handleUIMessage(pi *Pi, msg *UIMessage, conn *sql.DB) error {
+func handleUIMessage(state *uiClientState, msg *common.UIMessage, conn *sql.DB) error {
 	switch msg.ActionID {
-	case ActionSetFlags:
-		pi.SetFlags(msg.Flags, uint32(msg.FlagMask))
-	case ActionSetWorkloadDefinition:
+	case common.ActionSetFlags:
+		if msg.FlagMask&common.FlagIsEnabled > 0 {
+			state.EnableOutput = msg.Flags&common.FlagIsEnabled > 0
+		}
+		if msg.FlagMask&common.FlagEnforce > 0 {
+			state.EnforceOutput = msg.Flags&common.FlagEnforce > 0
+		}
+
+	case common.ActionSetWorkloadDefinition:
 		def := msg.WorkloadDefinition
 		tx, err := conn.Begin()
 		if err != nil {
@@ -142,7 +168,7 @@ func handleUIMessage(pi *Pi, msg *UIMessage, conn *sql.DB) error {
 
 		return tx.Commit()
 
-	case ActionDeleteWorkloadDefinition:
+	case common.ActionDeleteWorkloadDefinition:
 		tx, err := conn.Begin()
 		if err != nil {
 			return err

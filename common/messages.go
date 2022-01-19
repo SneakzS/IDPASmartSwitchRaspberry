@@ -1,18 +1,23 @@
-package idpa
+package common
 
-import (
-	"errors"
-	"time"
-)
+import "time"
 
-const (
-	_ = iota
-	MsgRequest
-	MsgOffer
-	MsgSelect
-	MsgDiscard
-	MsgAck
-)
+type WorkloadRequest struct {
+	CustomerID         int32     `json:"customerId"`
+	DurationM          int32     `json:"durationM"`
+	ToleranceDurationM int32     `json:"toleranceDurationM"`
+	WorkloadW          int32     `json:"workloadW"`
+	StartTime          time.Time `json:"startTime"`
+}
+
+type WorkloadResponse struct {
+	OffsetM  int32 `json:"offsetM"`
+	PriceCNT int32 `json:"priceCnt"`
+}
+
+type ErrorResponse struct {
+	Message string
+}
 
 const (
 	ActionSetWorkloadDefinition    = 1
@@ -29,31 +34,6 @@ const (
 	FlagIsUIConnected    = 1 << 2
 	FlagProviderClientOK = 1 << 3
 )
-
-var (
-	ErrInvalidMessage      = errors.New("invalid message")
-	ErrWorkloadNotPossible = errors.New("workload is not possible")
-	ErrNoWires             = errors.New("customer has no wires")
-)
-
-type Offer struct {
-	OfferID   int32
-	OffsetM   int32
-	WorkloadW int32
-	PriceCNT  int32
-}
-
-type ProviderMessage struct {
-	MessageTypeID      int32
-	RequestID          int32
-	CustomerID         int32
-	OfferID            int32
-	DurationM          int32
-	ToleranceDurationM int32
-	WorkloadW          int32
-	StartTime          time.Time
-	Offers             []Offer
-}
 
 type WorkloadDefinition struct {
 	WorkloadDefinitionID int32           `json:"workloadDefinitionId"`

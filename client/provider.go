@@ -1,38 +1,49 @@
-package idpa
+package client
 
 import (
-	"context"
+	"bytes"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/philip-s/idpa/common"
 )
 
-func RunProviderClient(ctx context.Context, pi *Pi, conn *sql.DB, serverURL string, customerID int32) {
+type providerClientState struct {
+	IsOK         bool
+	EnableOutput bool
+}
+
+func runProviderClient(stateChan chan<- providerClientState, conn *sql.DB, c *Config, done <-chan struct{}) {
 	ticker := time.NewTicker(time.Second)
 	var (
 		now              time.Time
 		lastSampleUpdate time.Time
 		sampleMap        map[int64]WorkloadSample
+		currentState     providerClientState
 	)
 
 	for {
+		newState := currentState
+
 		select {
-		case <-ctx.Done():
+		case <-done:
 			return
 
 		case now = <-ticker.C:
 			if lastSampleUpdate.Add(time.Minute).Before(now) {
-				wls, err := updateProviderClient(now, conn, serverURL, customerID)
+				wls, err := updateProviderClient(now, conn, c.ProviderURL, int32(c.CustomerID))
 				if err != nil {
 					log.Println(err)
-					pi.SetFlags(0, FlagProviderClientOK)
+					newState.IsOK = false
 					continue
 				}
 
-				pi.SetFlags(FlagProviderClientOK, FlagProviderClientOK)
+				newState.IsOK = true
 
 				sampleMap = make(map[int64]WorkloadSample)
 				for _, sample := range wls {
@@ -40,21 +51,15 @@ func RunProviderClient(ctx context.Context, pi *Pi, conn *sql.DB, serverURL stri
 				}
 			}
 
-			// if no specific output is enforced, check if we have an active workflow
-			// and act acordingly
+			// update our output based on the loaded samples
+			nowTC := now.Truncate(time.Minute)
+			sample := sampleMap[nowTC.Unix()]
+			newState.EnableOutput = sample.OutputEnabled
+		}
 
-			flags := pi.Flags()
-
-			if flags&FlagEnforce == 0 {
-				nowTC := now.Truncate(time.Minute)
-				sample := sampleMap[nowTC.Unix()]
-
-				if sample.OutputEnabled {
-					pi.SetFlags(FlagIsEnabled, FlagIsEnabled)
-				} else {
-					pi.SetFlags(0, FlagIsEnabled)
-				}
-			}
+		if newState != currentState {
+			stateChan <- newState
+			currentState = newState
 		}
 	}
 }
@@ -111,7 +116,6 @@ func updateProviderClient(now time.Time, conn *sql.DB, serverURL string, custome
 		s := WorkloadSample{}
 		if !exists {
 			s, overlaps = CheckWorkloadOverlaps(samples, pw.MatchTime, pw.Definition.ToleranceDurationM)
-
 		}
 
 		if overlaps {
@@ -124,18 +128,11 @@ func updateProviderClient(now time.Time, conn *sql.DB, serverURL string, custome
 		}
 
 		if !exists {
-			wl, err := RequestWorkload(pw, serverURL, customerID)
+			wl := Workload{}
+			err = RequestWorkload(&wl, pw, serverURL, customerID)
 			if err != nil {
-				if err == ErrWorkloadNotPossible {
-					log.Println(ErrWorkloadPlan{
-						WorkloadDefinitionID: pw.Definition.WorkloadDefinitionID,
-						MatchTime:            pw.MatchTime,
-						Reason:               "workload is not possible",
-					})
-					continue
-				} else {
-					return nil, err
-				}
+				log.Println(err)
+				continue
 			}
 
 			err = CreateWorkloadAndSamples(tx, pw.Definition, pw.MatchTime, wl.OffsetM)
@@ -159,11 +156,11 @@ func updateProviderClient(now time.Time, conn *sql.DB, serverURL string, custome
 }
 
 type PlannedWorkload struct {
-	Definition WorkloadDefinition
+	Definition common.WorkloadDefinition
 	MatchTime  time.Time
 }
 
-func PlanWorloads(definitions []WorkloadDefinition, startTime time.Time, durationM int32) []PlannedWorkload {
+func PlanWorloads(definitions []common.WorkloadDefinition, startTime time.Time, durationM int32) []PlannedWorkload {
 	var planned []PlannedWorkload
 	startTime = startTime.Truncate(time.Minute)
 
@@ -205,32 +202,56 @@ func CheckWorkloadOverlaps(samples []WorkloadSample, startTime time.Time, durati
 	return WorkloadSample{}, false
 }
 
-func RequestWorkload(pw PlannedWorkload, serverURL string, customerID int32) (Workload, error) {
-	dialer := websocket.Dialer{}
+func RequestWorkload(w *Workload, pw PlannedWorkload, url string, customerID int32) error {
 
-	conn, _, err := dialer.Dial(serverURL, nil)
+	req := common.WorkloadRequest{
+		CustomerID:         customerID,
+		DurationM:          pw.Definition.DurationM,
+		ToleranceDurationM: pw.Definition.ToleranceDurationM,
+		WorkloadW:          pw.Definition.WorkloadW,
+		StartTime:          pw.MatchTime,
+	}
+
+	data, _ := json.Marshal(&req)
+
+	resp, err := http.Post(url, "application/json", bytes.NewReader(data))
 	if err != nil {
-		return Workload{}, err
+		return err
 	}
-	defer conn.Close()
+	defer resp.Body.Close()
 
-	o := Offer{}
-	p := ProviderConnection{conn}
-	err = handleProviderClient(&o, p, pw.Definition, pw.MatchTime, customerID)
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return Workload{}, err
+		return err
 	}
 
-	if o.WorkloadW != pw.Definition.WorkloadW {
-		return Workload{}, ErrInvalidMessage
+	if resp.StatusCode != http.StatusOK {
+		errResp := common.ErrorResponse{}
+		err = json.Unmarshal(body, &errResp)
+		if err != nil {
+			return fmt.Errorf("invalid server response: %w", err)
+		}
+
+		err := ErrWorkloadPlan{
+			WorkloadDefinitionID: pw.Definition.WorkloadDefinitionID,
+			MatchTime:            pw.MatchTime,
+			Reason:               errResp.Message,
+		}
+		return err
 	}
 
-	return Workload{
+	workloadResp := common.WorkloadResponse{}
+	err = json.Unmarshal(body, &workloadResp)
+	if err != nil {
+		return err // this is very bad
+	}
+
+	*w = Workload{
 		WorkloadDefinitionID: pw.Definition.WorkloadDefinitionID,
 		MatchTime:            pw.MatchTime,
-		WorkloadW:            o.WorkloadW,
-		OffsetM:              o.OffsetM,
+		WorkloadW:            pw.Definition.WorkloadW,
+		OffsetM:              workloadResp.OffsetM,
 		DurationM:            pw.Definition.DurationM,
-	}, nil
-
+	}
+	return nil
 }

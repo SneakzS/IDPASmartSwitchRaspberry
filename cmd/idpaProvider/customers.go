@@ -1,4 +1,4 @@
-package serverui
+package main
 
 import (
 	"database/sql"
@@ -8,7 +8,6 @@ import (
 	"strconv"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/philip-s/idpa"
 	"github.com/philip-s/idpa/provider"
 )
 
@@ -21,7 +20,7 @@ var (
 	customersTemplate = compileTemplate("layout.html", "customers.html")
 )
 
-func getCustomerRoutes(r *httprouter.Router, conn *sql.DB) {
+func addCustomerRoutes(r *httprouter.Router, db *sql.DB) {
 	r.GET("/customers", func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		var (
 			err        error
@@ -38,13 +37,13 @@ func getCustomerRoutes(r *httprouter.Router, conn *sql.DB) {
 
 	begin:
 
-		tx, err := conn.Begin()
+		tx, err := db.Begin()
 		if err != nil {
 			goto sendError
 		}
 		defer tx.Rollback()
 
-		customers, err := idpa.GetCustomers(tx)
+		customers, err := provider.GetCustomers(tx)
 		if err != nil {
 			goto sendError
 		}

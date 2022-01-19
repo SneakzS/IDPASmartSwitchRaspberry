@@ -5,43 +5,43 @@ import (
 	"fmt"
 	"os"
 
+	_ "embed"
+
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/philip-s/idpa/client"
+	"github.com/philip-s/idpa/common"
 )
 
+//go:embed schema-client.sql
+var createClientDBScript string
+
 var (
-	action            = flag.String("action", "", "Specify the action you want to accomplish")
-	script            = flag.String("script", "", "Specify a script file")
-	wireID            = flag.Int("wire-id", 0, "Specify the ID of the wire")
-	startTimeStr      = flag.String("start-time", "", "Specify the start time")
-	customerID        = flag.Int("customer-id", 0, "Specify the customer ID")
-	durationM         = flag.Int("duration-m", 0, "Duration in minutes")
-	toleranceDuration = flag.Int("tolerance-duration-m", 0, "Specify the tolerance duration")
-	workloadW         = flag.Int("workload-w", 0, "Workload in Watts")
-	add               = flag.Bool("add", false, "add the to the db")
-	databaseFile      = flag.String("db", "", "Specify the database")
-	config            = flag.String("config", "", "Specify the service config file")
-	serviceMode       = flag.String("service-mode", "", "Override the service mode specified in the config")
+	action = flag.String("action", "", "Specify the action you want to accomplish")
+	config = flag.String("config", "", "Specify the service config file")
+	help   = flag.Bool("help", false, "Print help")
 )
 
 func main() {
 	flag.Parse()
 
+	if *help {
+		*action = "help"
+	}
+
 	var err error
 
 	switch *action {
-	case "execute-script":
-		err = executeScript()
-	case "get-wire-workload":
-		err = getWireWorkload()
-	case "get-optimal-workload":
-		err = getOptimalWorkload()
+	case "help":
+		printHelp()
 	case "service":
 		err = runService()
-	case "new-uiclientguid":
-		err = newUIClientGuid()
-	case "init-db":
+	case "initdb":
 		err = initializeDatabase()
+	case "newguid":
+		guid := uuid.New()
+		fmt.Println(guid)
+
 	}
 
 	if err != nil {
@@ -50,44 +50,17 @@ func main() {
 	}
 }
 
-func executeScript() error {
-	if *script == "" {
-		return fmt.Errorf("-script is required")
-	}
-	if *databaseFile == "" {
-		return fmt.Errorf("-db is required")
-	}
-
-	return invokeScriptFile(*script, *databaseFile)
-}
-
-func newUIClientGuid() error {
-	cfg, err := loadConfig()
+func initializeDatabase() error {
+	ini, err := common.ParseINIFile(*config)
 	if err != nil {
 		return err
 	}
 
-	newUUID := uuid.New()
-	cfg.SetString("Client", "uiclientguid", newUUID.String())
-
-	return saveConfig(cfg)
-}
-
-func initializeDatabase() error {
-	if *serviceMode == "" {
-		return fmt.Errorf("-service-mode is required")
+	config := client.Config{}
+	err = client.ReadConfig(&config, ini)
+	if err != nil {
+		return err
 	}
 
-	if *databaseFile == "" {
-		return fmt.Errorf("-db is required")
-	}
-
-	switch *serviceMode {
-	case "server":
-		return invokeScript(createServerDBScript, *databaseFile)
-	case "client":
-		return invokeScript(createClientDBScript, *databaseFile)
-	default:
-		return fmt.Errorf("invalid service mode %s", *serviceMode)
-	}
+	return common.InvokeSQLScript(createClientDBScript, config.Database)
 }

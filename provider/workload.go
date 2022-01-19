@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/philip-s/idpa"
+	"github.com/philip-s/idpa/common"
 )
 
 type WireWorkload struct {
@@ -91,7 +91,7 @@ search:
 		goto nooverload
 	}
 	// the wire will be overloaded at all time, the workload is not possible
-	return 0, idpa.ErrWorkloadNotPossible
+	return 0, common.ErrWorkloadNotPossible
 
 nooverload:
 	return offsetM, nil

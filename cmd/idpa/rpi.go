@@ -6,10 +6,20 @@ package main
 
 import (
 	"os"
+
+	"github.com/philip-s/idpa/client"
 )
 
-func setupRPI() (piOutput, error) {
-	return nil, os.ErrNotExist
+func writeOutputRPI(o client.Output) {
+
+}
+
+func readInputRPI(inp *client.Input) error {
+	return os.ErrNotExist
+}
+
+func setupRPI() error {
+	return os.ErrNotExist
 }
 
 func closeRPI() {

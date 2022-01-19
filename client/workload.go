@@ -1,11 +1,13 @@
-package idpa
+package client
 
 import (
 	"database/sql"
 	"time"
+
+	"github.com/philip-s/idpa/common"
 )
 
-func GetWorkloadDefinitions(tx *sql.Tx) ([]WorkloadDefinition, error) {
+func GetWorkloadDefinitions(tx *sql.Tx) ([]common.WorkloadDefinition, error) {
 	res, err := tx.Query(
 		`SELECT workloadDefinitionID, workloadW, durationM, 
 		toleranceDurationM, isEnabled, description, expiryDate
@@ -17,8 +19,8 @@ func GetWorkloadDefinitions(tx *sql.Tx) ([]WorkloadDefinition, error) {
 	defer res.Close()
 
 	var (
-		w           WorkloadDefinition
-		definitions []WorkloadDefinition
+		w           common.WorkloadDefinition
+		definitions []common.WorkloadDefinition
 	)
 
 	for res.Next() {
@@ -51,7 +53,7 @@ func GetWorkloadDefinitions(tx *sql.Tx) ([]WorkloadDefinition, error) {
 		}
 
 		for res.Next() {
-			var rp RepeatPattern
+			var rp common.RepeatPattern
 			err = res.Scan(&rp.MonthFlags, &rp.DayFlags, &rp.HourFlags, &rp.MinuteFlags, &rp.WeekdayFlags)
 			if err != nil {
 				return definitions, err
@@ -62,7 +64,7 @@ func GetWorkloadDefinitions(tx *sql.Tx) ([]WorkloadDefinition, error) {
 	return definitions, nil
 }
 
-func CreateWorkloadDefinition(tx *sql.Tx, d WorkloadDefinition) (int32, error) {
+func CreateWorkloadDefinition(tx *sql.Tx, d common.WorkloadDefinition) (int32, error) {
 	res, err := tx.Exec(
 		`INSERT INTO WorkloadDefinition VALUES
 		(NULL, ?, ?, ?, ?, ?, datetime(?))`,
@@ -88,7 +90,7 @@ func CreateWorkloadDefinition(tx *sql.Tx, d WorkloadDefinition) (int32, error) {
 	return int32(id), nil
 }
 
-func UpdateWorkloadDefinition(tx *sql.Tx, d WorkloadDefinition) error {
+func UpdateWorkloadDefinition(tx *sql.Tx, d common.WorkloadDefinition) error {
 	_, err := tx.Exec(
 		`UPDATE WorkloadDefinition SET 
 		workloadW = ?, durationM = ?,
@@ -130,14 +132,13 @@ func DeleteWorkloadDefinition(tx *sql.Tx, workloadDefinitionID int32) error {
 }
 
 type WorkloadSample struct {
-	SampleTime       time.Time
-	WorkloadID       int32
-	MeasuredWorkload int32
-	OutputEnabled    bool
-	dbStored         bool
+	SampleTime    time.Time
+	WorkloadID    int32
+	OutputEnabled bool
+	dbStored      bool
 }
 
-func CreateWorkload(tx *sql.Tx, d WorkloadDefinition, matchTime time.Time, offsetM int32) (int32, error) {
+func CreateWorkload(tx *sql.Tx, d common.WorkloadDefinition, matchTime time.Time, offsetM int32) (int32, error) {
 	res, err := tx.Exec(
 		`INSERT INTO Workload VALUES (NULL, ?, datetime(?), ?, ?, ?)`,
 		d.WorkloadDefinitionID, matchTime, d.WorkloadW, offsetM, d.DurationM,
@@ -165,7 +166,7 @@ func CreateWorkloadSamples(tx *sql.Tx, workloadID int32, startTime time.Time, du
 		}
 	}
 
-	stmt, err := tx.Prepare("INSERT INTO WorkloadSample VALUES (datetime(?), ?, 0)")
+	stmt, err := tx.Prepare("INSERT INTO WorkloadSample VALUES (datetime(?), ?)")
 	if err != nil {
 		return err
 	}
@@ -180,7 +181,7 @@ func CreateWorkloadSamples(tx *sql.Tx, workloadID int32, startTime time.Time, du
 	return nil
 }
 
-func CreateWorkloadAndSamples(tx *sql.Tx, d WorkloadDefinition, matchTime time.Time, offsetM int32) error {
+func CreateWorkloadAndSamples(tx *sql.Tx, d common.WorkloadDefinition, matchTime time.Time, offsetM int32) error {
 	workloadID, err := CreateWorkload(tx, d, matchTime, offsetM)
 	if err != nil {
 		return err
@@ -193,7 +194,7 @@ func GetWorkloadSamples(tx *sql.Tx, startTime time.Time, durationM int32) ([]Wor
 	startTime = startTime.UTC().Truncate(time.Minute)
 
 	res, err := tx.Query(
-		`SELECT sampleTime, workloadID, measuredWorkloadW FROM WorkloadSample
+		`SELECT sampleTime, workloadID FROM WorkloadSample
 		WHERE sampleTime >= datetime(?) AND sampleTime < datetime(?)`,
 		startTime, startTime.Add(time.Duration(durationM)*time.Minute),
 	)
@@ -209,21 +210,19 @@ func GetWorkloadSamples(tx *sql.Tx, startTime time.Time, durationM int32) ([]Wor
 
 	for res.Next() {
 		var (
-			sampleTime        time.Time
-			workloadID        int32
-			measuredWorkloadW int32
+			sampleTime time.Time
+			workloadID int32
 		)
-		err = res.Scan(&sampleTime, &workloadID, &measuredWorkloadW)
+		err = res.Scan(&sampleTime, &workloadID)
 		if err != nil {
 			return nil, err
 		}
 
 		samples[int(sampleTime.Sub(startTime).Minutes())] = WorkloadSample{
-			SampleTime:       sampleTime,
-			WorkloadID:       workloadID,
-			MeasuredWorkload: measuredWorkloadW,
-			OutputEnabled:    true,
-			dbStored:         true,
+			SampleTime:    sampleTime,
+			WorkloadID:    workloadID,
+			OutputEnabled: true,
+			dbStored:      true,
 		}
 
 	}
