@@ -32,6 +32,8 @@ func RunProviderClient(ctx context.Context, pi *Pi, conn *sql.DB, serverURL stri
 					continue
 				}
 
+				pi.SetFlags(FlagProviderClientOK, FlagProviderClientOK)
+
 				sampleMap = make(map[int64]WorkloadSample)
 				for _, sample := range wls {
 					sampleMap[sample.SampleTime.Unix()] = sample
@@ -213,7 +215,7 @@ func RequestWorkload(pw PlannedWorkload, serverURL string, customerID int32) (Wo
 	defer conn.Close()
 
 	o := Offer{}
-	p := wsProviderHandler{conn}
+	p := ProviderConnection{conn}
 	err = handleProviderClient(&o, p, pw.Definition, pw.MatchTime, customerID)
 	if err != nil {
 		return Workload{}, err

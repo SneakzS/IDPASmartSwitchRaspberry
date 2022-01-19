@@ -1,4 +1,4 @@
-package idpa
+package provider
 
 import "database/sql"
 

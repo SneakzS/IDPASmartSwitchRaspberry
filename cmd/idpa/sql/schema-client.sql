@@ -9,6 +9,7 @@ CREATE TABLE WorkloadDefinition (
 );
 
 CREATE TABLE TimePattern (
+    timePatternID INTEGER NOT NULL PRIMARY KEY,
     workloadDefinitionID INTEGER NOT NULL,
     monthFlags INTEGER NOT NULL,
     dayFlags INTEGER NOT NULL,

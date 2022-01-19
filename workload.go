@@ -5,129 +5,10 @@ import (
 	"time"
 )
 
-type WireWorkload struct {
-	WorkloadW  int32
-	WireID     int32
-	SampleTime time.Time
-	dbStored   bool
-}
-
-func GetWireWorkload(tx *sql.Tx, wireID int32, startTime time.Time, durationM int32) ([]WireWorkload, error) {
-
-	startTime = startTime.UTC().Truncate(time.Minute)
-	samples := make([]WireWorkload, durationM)
-
-	for i := range samples {
-		samples[i].SampleTime = startTime.Add(time.Duration(i) * time.Minute)
-	}
-
-	res, err := tx.Query(
-		`SELECT sampleTime, workloadW 
-		FROM WireWorkload WHERE wireID = ? AND sampleTime >= datetime(?) AND sampleTime < datetime(?)`,
-		wireID, startTime, startTime.Add(time.Duration(durationM)*time.Minute),
-	)
-
-	if err != nil {
-		return nil, err
-	}
-	defer res.Close()
-
-	for res.Next() {
-		var (
-			sampleTime time.Time
-			workloadW  int32
-		)
-
-		var err = res.Scan(&sampleTime, &workloadW)
-		if err != nil {
-			return nil, err
-		}
-
-		samples[int(sampleTime.Sub(startTime).Minutes())] = WireWorkload{
-			WorkloadW:  workloadW,
-			WireID:     wireID,
-			SampleTime: sampleTime,
-			dbStored:   true,
-		}
-	}
-
-	return samples, nil
-}
-
-func GetOptimalWorkloadOffset(tx *sql.Tx, wires []Wire, d WorkloadDefinition, startTime time.Time) (int32, error) {
-	var err error
-
-	type wireSample struct {
-		w       Wire
-		samples []WireWorkload
-	}
-	startTime = startTime.Truncate(time.Minute).UTC()
-	wireSamples := make([]wireSample, len(wires))
-
-	for i, wire := range wires {
-		wireSamples[i].w = wire
-		wireSamples[i].samples, err = GetWireWorkload(tx, wire.WireID, startTime, d.ToleranceDurationM)
-		if err != nil {
-			return 0, err
-		}
-	}
-
-	var offsetM int32
-search:
-	for i := int(offsetM); i < int(offsetM+d.DurationM) && i < len(wireSamples); i++ {
-		for i := offsetM; i < offsetM+d.DurationM; i++ {
-			for _, ws := range wireSamples {
-				if ws.samples[i].WorkloadW+d.WorkloadW > ws.w.CapacityW {
-					// we detected a wire overload
-					offsetM = i + 1
-					continue search
-				}
-			}
-		}
-
-		// all whires are fine we can use t as our start time
-		goto nooverload
-	}
-	// the wire will be overloaded at all time, the workload is not possible
-	return 0, ErrWorkloadNotPossible
-
-nooverload:
-	return offsetM, nil
-}
-
-func AddWireWorkload(tx *sql.Tx, wireID int32, startTime time.Time, durationM, workloadW int32) error {
-
-	samples, err := GetWireWorkload(tx, wireID, startTime, durationM)
-	if err != nil {
-		return err
-	}
-
-	for i := range samples {
-		samples[i].WorkloadW += workloadW
-	}
-
-	for _, sample := range samples {
-		if sample.dbStored {
-			_, err = tx.Exec(`UPDATE WireWorkload SET workloadW = ? WHERE wireID = ? AND sampleTime = datetime(?)`,
-				sample.WorkloadW, wireID, sample.SampleTime,
-			)
-		} else {
-			_, err = tx.Exec(`INSERT INTO WireWorkload VALUES (?, datetime(?), ?)`,
-				wireID, sample.SampleTime, sample.WorkloadW)
-		}
-
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func GetWorkloadDefinitions(tx *sql.Tx) ([]WorkloadDefinition, error) {
 	res, err := tx.Query(
 		`SELECT workloadDefinitionID, workloadW, durationM, 
-		toleranceDurationM, isEnabled, description, datetime(expiryDate)
+		toleranceDurationM, isEnabled, description, expiryDate
 		FROM WorkloadDefinition`,
 	)
 	if err != nil {
@@ -141,13 +22,18 @@ func GetWorkloadDefinitions(tx *sql.Tx) ([]WorkloadDefinition, error) {
 	)
 
 	for res.Next() {
+		expiryDateStr := ""
 		err = res.Scan(
 			&w.WorkloadDefinitionID, &w.WorkloadW, &w.DurationM, &w.ToleranceDurationM,
-			&w.IsEnabled, &w.Description, &w.ExpiryDate)
+			&w.IsEnabled, &w.Description, &expiryDateStr)
 		if err != nil {
 			return definitions, err
 		}
 
+		w.ExpiryDate, err = time.Parse("2006-01-02 15:04:05", expiryDateStr)
+		if err != nil {
+			return definitions, err
+		}
 		definitions = append(definitions, w)
 	}
 
@@ -192,8 +78,11 @@ func CreateWorkloadDefinition(tx *sql.Tx, d WorkloadDefinition) (int32, error) {
 	}
 
 	for _, p := range d.RepeatPattern {
-		_, err = tx.Exec(`INSERT INTO TimePattern VALUES(?, ?, ?, ?, ?, ?)`, id,
+		_, err = tx.Exec(`INSERT INTO TimePattern VALUES(NULL, ?, ?, ?, ?, ?, ?)`, id,
 			p.MonthFlags, p.DayFlags, p.HourFlags, p.MinuteFlags, p.WeekdayFlags)
+		if err != nil {
+			return 0, err
+		}
 	}
 
 	return int32(id), nil
@@ -222,7 +111,7 @@ func UpdateWorkloadDefinition(tx *sql.Tx, d WorkloadDefinition) error {
 	}
 
 	for _, p := range d.RepeatPattern {
-		_, err = tx.Exec(`INSERT INTO TimePattern VALUES (?, ?, ?, ?, ?, ?)`,
+		_, err = tx.Exec(`INSERT INTO TimePattern VALUES (NULL, ?, ?, ?, ?, ?, ?)`,
 			d.WorkloadDefinitionID, p.MonthFlags,
 			p.DayFlags, p.HourFlags,
 			p.MinuteFlags, p.WeekdayFlags,

@@ -6,12 +6,8 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-type wsProviderHandler struct {
-	conn *websocket.Conn
-}
-
-func (p wsProviderHandler) Receive(q *ProviderMessage, requestID int32) error {
-	msgType, msg, err := p.conn.ReadMessage()
+func ReceiveProviderMessage(c *websocket.Conn, q *ProviderMessage) error {
+	msgType, msg, err := c.ReadMessage()
 	if err != nil {
 		return err
 	}
@@ -28,18 +24,14 @@ func (p wsProviderHandler) Receive(q *ProviderMessage, requestID int32) error {
 		return ErrInvalidMessage
 	}
 
-	if requestID != 0 && q.RequestID != requestID {
-		return ErrInvalidMessage
-	}
-
 	return nil
 }
 
-func (p wsProviderHandler) Send(m *ProviderMessage) error {
+func SendProviderMessage(c *websocket.Conn, m *ProviderMessage) error {
 	msg, err := json.Marshal(m)
 	if err != nil {
 		return err
 	}
 
-	return p.conn.WriteMessage(websocket.TextMessage, msg)
+	return c.WriteMessage(websocket.TextMessage, msg)
 }

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"time"
 
@@ -18,12 +17,42 @@ type UIConfig struct {
 }
 
 func RunUIClient(ctx context.Context, pi *Pi, sqlConn *sql.DB, c UIConfig) {
-	dialer := websocket.Dialer{}
+	messages := make(chan UIMessage, 1)
+	go fetchMessages(ctx, pi, c, messages)
 
 	for {
-		conn, _, err := dialer.DialContext(ctx, c.ServerURL, nil)
+		select {
+		case <-ctx.Done():
+			return
+
+		case msg := <-messages:
+			err := handleUIMessage(pi, &msg, sqlConn)
+			if err != nil {
+				log.Println(err)
+			}
+		}
+	}
+}
+
+func fetchMessages(ctx context.Context, pi *Pi, c UIConfig, messages chan<- UIMessage) {
+	var closing bool
+	var conn *websocket.Conn
+	var err error
+	var dialer websocket.Dialer
+
+	go func() {
+		<-ctx.Done()
+		closing = true
+
+		if conn != nil {
+			conn.WriteMessage(websocket.CloseMessage, nil)
+		}
+
+	}()
+
+	for {
+		conn, _, err = dialer.DialContext(ctx, c.ServerURL, nil)
 		if err != nil {
-			log.Println(err)
 			goto handleError
 		}
 
@@ -35,16 +64,10 @@ func RunUIClient(ctx context.Context, pi *Pi, sqlConn *sql.DB, c UIConfig) {
 		log.Println("connected to " + c.ServerURL)
 		pi.SetFlags(FlagIsUIConnected, FlagIsUIConnected)
 
-	recevie:
+	receive:
 		for {
 			msgType, msg, err := conn.ReadMessage()
 			if err != nil {
-				fmt.Println("ReadMessage returned, error is ", err)
-				var errClose *websocket.CloseError
-				if errors.As(err, &errClose) {
-					return
-				}
-
 				log.Println(err)
 				goto handleError
 			}
@@ -57,29 +80,26 @@ func RunUIClient(ctx context.Context, pi *Pi, sqlConn *sql.DB, c UIConfig) {
 				err := json.Unmarshal(msg, &parsedMessage)
 				if err != nil {
 					log.Println("Invalid message received", err)
-					continue recevie
+					continue receive
 				}
 
-				err = handleUIMessage(pi, &parsedMessage, sqlConn)
-				if err != nil {
-					log.Println(err)
-					continue recevie
-				}
-
-			case websocket.CloseMessage:
-				log.Println("connection closed")
-				goto handleError
+				log.Println(string(msg))
+				messages <- parsedMessage
 			}
 		}
 
 	handleError:
+		var errClose *websocket.CloseError
+		if closing && errors.As(err, &errClose) {
+			return
+		}
+
 		if conn != nil {
 			conn.Close()
 		}
 		pi.SetFlags(0, FlagIsUIConnected)
 		time.Sleep(5 * time.Second)
 	}
-
 }
 
 func sendHeloMessage(c *websocket.Conn, clientGUID string) error {
@@ -92,7 +112,7 @@ func sendHeloMessage(c *websocket.Conn, clientGUID string) error {
 	if err != nil {
 		return err
 	}
-
+	//log.Println("Hello Message: ", string(data))
 	return c.WriteMessage(websocket.TextMessage, data)
 }
 

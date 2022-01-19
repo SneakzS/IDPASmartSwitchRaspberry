@@ -9,11 +9,12 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/philip-s/idpa"
+	"github.com/philip-s/idpa/provider"
 )
 
 type customerView struct {
 	baseView
-	Customers []idpa.Customer
+	Customers []provider.Customer
 }
 
 var (
