@@ -20,6 +20,14 @@ func runService() error {
 		return err
 	}
 
+	if c.Output == client.OutputRpi {
+		err = setupRPI()
+		if err != nil {
+			return err
+		}
+		defer closeRPI()
+	}
+
 	var (
 		clientInputChan  = make(chan client.Input, 1)
 		clientOutputChan = make(chan client.Output, 1)
