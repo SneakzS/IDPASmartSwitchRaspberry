@@ -145,7 +145,7 @@ func runUIMessagePump(isOkChan chan<- bool, messagesOUT <-chan common.UIMessage,
 					continue receive
 				}
 
-				log.Println(string(msg))
+				//log.Println(string(msg))
 				messagesIN <- parsedMessage
 			}
 		}
