@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func StoreSensorData(db *sql.DB, inp *Input, sampleTime time.Time) error {
+func StoreSensorData(db *sql.DB, sampleTime time.Time, power, current, voltage, shunt float64) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return err
@@ -14,7 +14,7 @@ func StoreSensorData(db *sql.DB, inp *Input, sampleTime time.Time) error {
 
 	_, err = tx.Exec(`INSERT INTO SensorSample
 			VALUES (datetime(?), ?, ?, ?, ?)`,
-		sampleTime, inp.Power, inp.Current, inp.Voltage, inp.Shunt,
+		sampleTime, power, current, voltage, shunt,
 	)
 	if err != nil {
 		return err

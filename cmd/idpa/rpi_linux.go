@@ -91,7 +91,7 @@ func setupSensor1() error {
 
 	ina, err := ina219.New(
 		0x40, // ina219 address
-		0x00, // i2c bus
+		0x01, // i2c bus
 		0.01, // Shunt resistance in ohms
 		config,
 		ina219.Gain320MV,

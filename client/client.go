@@ -3,6 +3,7 @@ package client
 import (
 	"database/sql"
 	"log"
+	"sort"
 	"time"
 )
 
@@ -34,6 +35,8 @@ func Run(outChan chan<- Output, inChan <-chan Input, c *Config, done <-chan stru
 
 		providerState     providerClientState
 		providerStateChan = make(chan providerClientState, 1)
+
+		sensorSamples []Input
 	)
 
 	db, err := sql.Open("sqlite3", c.Database)
@@ -71,10 +74,37 @@ func Run(outChan chan<- Output, inChan <-chan Input, c *Config, done <-chan stru
 		case providerState = <-providerStateChan:
 
 		case input := <-inChan:
-			err := StoreSensorData(db, &input, input.SensorSampleTime)
-			if err != nil {
-				log.Println(err)
+			if len(sensorSamples) > 0 && input.SensorSampleTime.Sub(sensorSamples[0].SensorSampleTime) >= time.Minute {
+				s := make([]float64, len(sensorSamples))
+				for i, inp := range sensorSamples {
+					s[i] = inp.Power
+				}
+				power := getMedianFloat(s)
+
+				for i, inp := range sensorSamples {
+					s[i] = inp.Current
+				}
+				current := getMedianFloat(s)
+
+				for i, inp := range sensorSamples {
+					s[i] = inp.Voltage
+				}
+				voltage := getMedianFloat(s)
+
+				for i, inp := range sensorSamples {
+					s[i] = inp.Shunt
+				}
+				shunt := getMedianFloat(s)
+
+				err := StoreSensorData(db, input.SensorSampleTime, power, current, voltage, shunt)
+				if err != nil {
+					log.Println(err)
+				} else {
+					sensorSamples = nil
+				}
+
 			}
+			sensorSamples = append(sensorSamples, input)
 
 		}
 
@@ -101,4 +131,20 @@ func Run(outChan chan<- Output, inChan <-chan Input, c *Config, done <-chan stru
 
 	}
 
+}
+
+func getMedianFloat(s []float64) float64 {
+	if len(s) == 0 {
+		return 0
+	}
+
+	sort.Float64s(s)
+
+	if len(s)%2 == 0 {
+		high := len(s) / 2
+		low := high - 1
+		return (s[low] + s[high]) / 2
+	}
+
+	return s[len(s)/2]
 }
