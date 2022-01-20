@@ -41,5 +41,4 @@ CREATE TABLE SensorSample (
     power FLOAT NOT NULL,
     current FLOAT NOT NULL,
     voltage FLOAT NOT NULL,
-    shunt FLOAT NOT NULL
 );
