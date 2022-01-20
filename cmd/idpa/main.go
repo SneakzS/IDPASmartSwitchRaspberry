@@ -17,9 +17,10 @@ import (
 var createClientDBScript string
 
 var (
-	action = flag.String("action", "", "Specify the action you want to accomplish")
-	config = flag.String("config", "", "Specify the service config file")
-	help   = flag.Bool("help", false, "Print help")
+	action         = flag.String("action", "", "Specify the action you want to accomplish")
+	config         = flag.String("config", "", "Specify the service config file")
+	help           = flag.Bool("help", false, "Print help")
+	mockSensorData = flag.Bool("mocksensordata", false, "Create random sensor data if output is console (for testing only)")
 )
 
 func main() {

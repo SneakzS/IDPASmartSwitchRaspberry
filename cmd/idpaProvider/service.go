@@ -51,7 +51,7 @@ func runService() error {
 
 	r := httprouter.New()
 	r.Handler("GET", "/static/*filepath", http.FileServer(http.FS(static)))
-	r.HandlerFunc("GET", "/api/v1/workload", func(rw http.ResponseWriter, r *http.Request) {
+	r.HandlerFunc("POST", "/api/v1/workload", func(rw http.ResponseWriter, r *http.Request) {
 		provider.WorkloadRequestHandler(rw, r, db, &serverMutex)
 	})
 	addCustomerRoutes(r, db)

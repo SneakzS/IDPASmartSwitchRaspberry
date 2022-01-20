@@ -8,6 +8,12 @@ import (
 )
 
 func runSensor(outChan chan<- client.Input, c *client.Config, done <-chan struct{}) {
+
+	if c.Output != client.OutputRpi && !*mockSensorData {
+		log.Println("warning: Sensor is not available")
+		return
+	}
+
 	t := time.NewTicker(1 * time.Second)
 
 	for {
@@ -16,20 +22,25 @@ func runSensor(outChan chan<- client.Input, c *client.Config, done <-chan struct
 			return
 
 		case now := <-t.C:
-			// only use the sensor if we use the raspberry pi
-			if c.Output == client.OutputRpi {
-				sampleTime := now.UTC().Truncate(time.Second)
-				data := client.Input{
-					SensorSampleTime: sampleTime,
-				}
-				err := readInputRPI(&data)
-				if err != nil {
-					log.Println(err)
-					continue
-				}
-
-				outChan <- data
+			sampleTime := now.UTC().Truncate(time.Second)
+			data := client.Input{
+				SensorSampleTime: sampleTime,
 			}
+			err := error(nil)
+
+			switch c.Output {
+			case client.OutputRpi:
+				err = readInputRPI(&data)
+			case client.OutputConsole:
+				err = readInputConsole(&data)
+
+			}
+
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			outChan <- data
 		}
 	}
 }

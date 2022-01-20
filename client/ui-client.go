@@ -20,11 +20,12 @@ type uiClientState struct {
 func runUIClient(stateChan chan<- uiClientState, sqlConn *sql.DB, c *Config, done <-chan struct{}) {
 	var (
 		currentState uiClientState
-		messages     = make(chan common.UIMessage, 1)
+		messagesIN   = make(chan common.UIMessage, 1)
+		messagesOUT  = make(chan common.UIMessage, 1)
 		isOkChan     = make(chan bool, 1)
 	)
 
-	go fetchMessages(isOkChan, messages, c, done)
+	go runUIMessagePump(isOkChan, messagesOUT, messagesIN, c, done)
 
 	for {
 		newState := currentState
@@ -36,15 +37,37 @@ func runUIClient(stateChan chan<- uiClientState, sqlConn *sql.DB, c *Config, don
 		case isOk := <-isOkChan:
 			newState.IsOK = isOk
 
-		case msg := <-messages:
-			err := handleUIMessage(&newState, &msg, sqlConn)
+		case msg := <-messagesIN:
+			response := common.UIMessage{}
+			hasResponse, err := handleUIMessage(&response, &newState, &msg, sqlConn)
 			if err != nil {
 				log.Println(err)
 				newState.IsOK = false
+
+				if msg.RequestID != 0 && !hasResponse {
+					response = common.UIMessage{
+						ActionID:     common.ActionNotifyError,
+						RequestID:    msg.RequestID,
+						ErrorMessage: "internal server error",
+					}
+					hasResponse = true
+				}
+
 			} else {
 				newState.IsOK = true
+
+				if msg.RequestID != 0 && !hasResponse {
+					response = common.UIMessage{
+						ActionID:  common.ActionNotifyNoContent,
+						RequestID: msg.RequestID,
+					}
+					hasResponse = true
+				}
 			}
 
+			if hasResponse {
+				messagesOUT <- response
+			}
 		}
 
 		if newState != currentState {
@@ -54,18 +77,37 @@ func runUIClient(stateChan chan<- uiClientState, sqlConn *sql.DB, c *Config, don
 	}
 }
 
-func fetchMessages(isOkChan chan<- bool, messages chan<- common.UIMessage, c *Config, done <-chan struct{}) {
+func runUIMessagePump(isOkChan chan<- bool, messagesOUT <-chan common.UIMessage, messagesIN chan<- common.UIMessage, c *Config, done <-chan struct{}) {
 	var closing bool
 	var conn *websocket.Conn
 	var err error
 	var dialer websocket.Dialer
 
 	go func() {
-		<-done
-		closing = true
 
-		if conn != nil {
-			conn.WriteMessage(websocket.CloseMessage, nil)
+		for {
+			select {
+			case <-done:
+				<-done
+				closing = true
+
+				if conn != nil {
+					conn.WriteMessage(websocket.CloseMessage, nil)
+				}
+				return
+
+			case msg := <-messagesOUT:
+				data, err := json.Marshal(&msg)
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+				err = conn.WriteMessage(websocket.TextMessage, data)
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+			}
 		}
 
 	}()
@@ -104,7 +146,7 @@ func fetchMessages(isOkChan chan<- bool, messages chan<- common.UIMessage, c *Co
 				}
 
 				log.Println(string(msg))
-				messages <- parsedMessage
+				messagesIN <- parsedMessage
 			}
 		}
 
@@ -136,7 +178,7 @@ func sendHeloMessage(c *websocket.Conn, clientGUID string) error {
 	return c.WriteMessage(websocket.TextMessage, data)
 }
 
-func handleUIMessage(state *uiClientState, msg *common.UIMessage, conn *sql.DB) error {
+func handleUIMessage(response *common.UIMessage, state *uiClientState, msg *common.UIMessage, conn *sql.DB) (hasResponse bool, err error) {
 	switch msg.ActionID {
 	case common.ActionSetFlags:
 		if msg.FlagMask&common.FlagIsEnabled > 0 {
@@ -150,37 +192,77 @@ func handleUIMessage(state *uiClientState, msg *common.UIMessage, conn *sql.DB) 
 		def := msg.WorkloadDefinition
 		tx, err := conn.Begin()
 		if err != nil {
-			return err
+			return false, err
 		}
 		defer tx.Rollback()
 
 		if def.WorkloadDefinitionID == 0 {
-			_, err := CreateWorkloadDefinition(tx, def)
+			def.WorkloadDefinitionID, err = CreateWorkloadDefinition(tx, def)
 			if err != nil {
-				return err
+				return false, err
 			}
 		} else {
-			err := UpdateWorkloadDefinition(tx, def)
+			err = UpdateWorkloadDefinition(tx, def)
 			if err != nil {
-				return err
+				return false, err
 			}
 		}
 
-		return tx.Commit()
+		err = tx.Commit()
+		if err != nil {
+			return false, err
+		}
+		*response = common.UIMessage{
+			ActionID:           common.ActionNotifyWorkloadCreated,
+			RequestID:          msg.RequestID,
+			WorkloadDefinition: def,
+		}
+		return true, nil
 
 	case common.ActionDeleteWorkloadDefinition:
 		tx, err := conn.Begin()
 		if err != nil {
-			return err
+			return false, err
 		}
 		defer tx.Rollback()
 
 		err = DeleteWorkloadDefinition(tx, msg.WorkloadDefinition.WorkloadDefinitionID)
 		if err != nil {
-			return err
+			return false, err
 		}
-		return tx.Commit()
+		err = tx.Commit()
+		return false, err
+
+	case common.ActionGetWorkloads:
+		tx, err := conn.Begin()
+		if err != nil {
+			return false, err
+		}
+		defer tx.Rollback()
+
+		workloads, err := GetWorkloads(tx, msg.StartTime, msg.DurationM)
+		if err != nil {
+			return false, err
+		}
+
+		activeWorkloads := make([]common.ActiveWorkload, len(workloads))
+		for i, wl := range workloads {
+			activeWorkloads[i] = common.ActiveWorkload{
+				WorkloadDefinitionID: wl.WorkloadDefinitionID,
+				StartTime:            wl.MatchTime,
+				OffsetM:              wl.OffsetM,
+				DurationM:            wl.DurationM,
+				WorkloadW:            wl.WorkloadW,
+			}
+		}
+
+		*response = common.UIMessage{
+			ActionID:        common.ActionNotifyWorkloads,
+			RequestID:       msg.RequestID,
+			ActiveWorkloads: activeWorkloads,
+		}
+		return true, nil
 	}
 
-	return nil
+	return false, nil
 }

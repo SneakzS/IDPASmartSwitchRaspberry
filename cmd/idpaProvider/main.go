@@ -8,6 +8,8 @@ import (
 
 	"github.com/philip-s/idpa/common"
 	"github.com/philip-s/idpa/provider"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 //go:embed schema-provider.sql
@@ -27,6 +29,9 @@ var (
 
 func main() {
 	var err error
+
+	flag.Parse()
+
 	switch *action {
 	case "initdb":
 		err = initializeDatabase()

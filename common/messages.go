@@ -26,6 +26,13 @@ const (
 	ActionSetFlags                 = 4
 	ActionGetFlags                 = 5
 	ActionHelo                     = 6
+	ActionGetWorkloads             = 7
+
+	// Response Actions
+	ActionNotifyError           = 101
+	ActionNotifyWorkloadCreated = 102
+	ActionNotifyNoContent       = 103
+	ActionNotifyWorkloads       = 104
 )
 
 const (
@@ -50,13 +57,19 @@ type ActiveWorkload struct {
 	WorkloadDefinitionID int32     `json:"workloadDefinitionId"`
 	OffsetM              int32     `json:"offsetM"`
 	StartTime            time.Time `json:"startTime"`
+	DurationM            int32     `json:"durationM"`
+	WorkloadW            int32     `json:"workloadW"`
 }
 
 type UIMessage struct {
 	ActionID           int32              `json:"actionId"`
+	RequestID          int32              `json:"requestId,omitempty"`
 	WorkloadDefinition WorkloadDefinition `json:"workloadDefinition,omitempty"`
 	Flags              uint32             `json:"flags,omitempty"`
 	FlagMask           uint32             `json:"flagMask,omitempty"`
-	ClientGUID         string             `json:"clientGuid"`
-	ActiveWorkloads    []ActiveWorkload   `json:"activeWorkloads"`
+	ClientGUID         string             `json:"clientGuid,omitempty"`
+	ActiveWorkloads    []ActiveWorkload   `json:"activeWorkloads,omitempty"`
+	ErrorMessage       string             `json:"errorMessage,omitempty"`
+	StartTime          time.Time          `json:"startTime,omitempty"`
+	DurationM          int32              `json:"durationM,omitempty"`
 }

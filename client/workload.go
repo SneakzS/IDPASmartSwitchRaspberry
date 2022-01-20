@@ -58,6 +58,8 @@ func GetWorkloadDefinitions(tx *sql.Tx) ([]common.WorkloadDefinition, error) {
 			if err != nil {
 				return definitions, err
 			}
+
+			d.RepeatPattern = append(d.RepeatPattern, rp)
 		}
 	}
 
