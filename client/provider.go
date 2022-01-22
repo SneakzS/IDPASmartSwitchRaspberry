@@ -86,7 +86,6 @@ func updateProviderClient(now time.Time, conn *sql.DB, serverURL string, custome
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
 
 	definitions, err := GetWorkloadDefinitions(tx)
 	if err != nil {
@@ -102,6 +101,8 @@ func updateProviderClient(now time.Time, conn *sql.DB, serverURL string, custome
 	if err != nil {
 		return nil, err
 	}
+
+	tx.Rollback()
 
 	set := make(map[int32Time]struct{})
 	for _, w := range workloads {
@@ -135,6 +136,11 @@ func updateProviderClient(now time.Time, conn *sql.DB, serverURL string, custome
 				continue
 			}
 
+			tx, err = conn.Begin()
+			if err != nil {
+				return nil, err
+			}
+
 			err = CreateWorkloadAndSamples(tx, pw.Definition, pw.MatchTime, wl.OffsetM)
 			if err != nil {
 				return nil, err
@@ -144,15 +150,26 @@ func updateProviderClient(now time.Time, conn *sql.DB, serverURL string, custome
 			if err != nil {
 				return nil, err
 			}
+
+			err = tx.Commit()
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
+
+	tx, err = conn.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
 
 	samples, err = GetWorkloadSamples(tx, now, 12*60)
 	if err != nil {
 		return nil, err
 	}
 
-	return samples, tx.Commit()
+	return samples, nil
 }
 
 type PlannedWorkload struct {

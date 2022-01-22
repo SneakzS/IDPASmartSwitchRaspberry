@@ -63,15 +63,15 @@ type ActiveWorkload struct {
 }
 
 type UIMessage struct {
-	ActionID           int32                `json:"actionId"`
-	RequestID          int32                `json:"requestId,omitempty"`
-	WorkloadDefinition WorkloadDefinition   `json:"workloadDefinition,omitempty"`
-	Flags              uint32               `json:"flags,omitempty"`
-	FlagMask           uint32               `json:"flagMask,omitempty"`
-	ClientGUID         string               `json:"clientGuid,omitempty"`
-	ActiveWorkloads    []ActiveWorkload     `json:"activeWorkloads,omitempty"`
-	CurreontWorkloads  []WorkloadDefinition `json:"currentWorkloads,omitempty"`
-	ErrorMessage       string               `json:"errorMessage,omitempty"`
-	StartTime          time.Time            `json:"startTime,omitempty"`
-	DurationM          int32                `json:"durationM,omitempty"`
+	ActionID                   int32                `json:"actionId"`
+	RequestID                  int32                `json:"requestId,omitempty"`
+	WorkloadDefinition         WorkloadDefinition   `json:"workloadDefinition,omitempty"`
+	Flags                      uint32               `json:"flags,omitempty"`
+	FlagMask                   uint32               `json:"flagMask,omitempty"`
+	ClientGUID                 string               `json:"clientGuid,omitempty"`
+	ActiveWorkloads            []ActiveWorkload     `json:"activeWorkloads,omitempty"`
+	CurrentWorkloadDefinitions []WorkloadDefinition `json:"currentWorkloadDefinitions,omitempty"`
+	ErrorMessage               string               `json:"errorMessage,omitempty"`
+	StartTime                  time.Time            `json:"startTime,omitempty"`
+	DurationM                  int32                `json:"durationM,omitempty"`
 }

@@ -199,9 +199,9 @@ func handleUIMessage(response *common.UIMessage, state *uiClientState, msg *comm
 			return false, err
 		}
 		*response = common.UIMessage{
-			ActionID:          common.ActionNotifyWorkloadDefinitions,
-			RequestID:         msg.RequestID,
-			CurreontWorkloads: defs,
+			ActionID:                   common.ActionNotifyWorkloadDefinitions,
+			RequestID:                  msg.RequestID,
+			CurrentWorkloadDefinitions: defs,
 		}
 		return true, nil
 
