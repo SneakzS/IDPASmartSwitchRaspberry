@@ -32,7 +32,6 @@ func readInputConsole(inp *client.Input) error {
 		inp.Power = rand.Float64() * 10   // between 0 and 10
 		inp.Current = rand.Float64() * 15 // between 0 and 15
 		inp.Voltage = rand.Float64() * 36 // between 0 and 36
-		inp.Shunt = rand.Float64()        // between 0 and 1
 		return nil
 	}
 	return fmt.Errorf("sensor not available")

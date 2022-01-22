@@ -19,7 +19,6 @@ type Input struct {
 	Power            float64
 	Current          float64
 	Voltage          float64
-	Shunt            float64
 }
 
 func Run(outChan chan<- Output, inChan <-chan Input, c *Config, done <-chan struct{}) error {
@@ -91,12 +90,13 @@ func Run(outChan chan<- Output, inChan <-chan Input, c *Config, done <-chan stru
 				}
 				voltage := getMedianFloat(s)
 
-				for i, inp := range sensorSamples {
-					s[i] = inp.Shunt
+				tx, err := db.Begin()
+				if err != nil {
+					return err
 				}
-				shunt := getMedianFloat(s)
+				defer tx.Rollback()
 
-				err := StoreSensorData(db, input.SensorSampleTime, power, current, voltage, shunt)
+				err = StoreSensorData(tx, input.SensorSampleTime, power, current, voltage)
 				if err != nil {
 					log.Println(err)
 				} else {

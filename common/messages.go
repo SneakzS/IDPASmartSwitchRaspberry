@@ -27,6 +27,7 @@ const (
 	ActionGetFlags                 = 5
 	ActionHelo                     = 6
 	ActionGetWorkloads             = 7
+	ActionGetSensorSamples         = 8
 
 	// Response Actions
 	ActionNotifyError               = 101
@@ -34,6 +35,7 @@ const (
 	ActionNotifyNoContent           = 103
 	ActionNotifyWorkloads           = 104
 	ActionNotifyWorkloadDefinitions = 105
+	ActionNotifySensorSamples       = 106
 )
 
 const (
@@ -62,6 +64,13 @@ type ActiveWorkload struct {
 	WorkloadW            int32     `json:"workloadW"`
 }
 
+type SensorSample struct {
+	SampleTime time.Time `json:"sampleTime"`
+	Power      float64   `json:"power"`
+	Current    float64   `json:"current"`
+	Voltage    float64   `json:"voltage"`
+}
+
 type UIMessage struct {
 	ActionID                   int32                `json:"actionId"`
 	RequestID                  int32                `json:"requestId,omitempty"`
@@ -74,4 +83,5 @@ type UIMessage struct {
 	ErrorMessage               string               `json:"errorMessage,omitempty"`
 	StartTime                  time.Time            `json:"startTime,omitempty"`
 	DurationM                  int32                `json:"durationM,omitempty"`
+	SensorSamples              []SensorSample       `json:"sensorSamples,omitempty"`
 }

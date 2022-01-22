@@ -279,6 +279,25 @@ func handleUIMessage(response *common.UIMessage, state *uiClientState, msg *comm
 			ActiveWorkloads: activeWorkloads,
 		}
 		return true, nil
+
+	case common.ActionGetSensorSamples:
+		tx, err := conn.Begin()
+		if err != nil {
+			return false, err
+		}
+		defer tx.Rollback()
+
+		samples, err := GetSensorData(tx)
+		if err != nil {
+			return false, err
+		}
+
+		*response = common.UIMessage{
+			ActionID:      common.ActionNotifySensorSamples,
+			RequestID:     msg.RequestID,
+			SensorSamples: samples,
+		}
+		return true, nil
 	}
 
 	return false, nil
