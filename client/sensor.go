@@ -21,7 +21,7 @@ func StoreSensorData(tx *sql.Tx, sampleTime time.Time, power, current, voltage f
 }
 
 func GetSensorData(tx *sql.Tx) (samples []common.SensorSample, err error) {
-	rows, err := tx.Query("SELECT sampleTime, power, current, voltage FROM SensorSample")
+	rows, err := tx.Query("SELECT datetime(sampleTime), power, current, voltage FROM SensorSample")
 	if err != nil {
 		return
 	}
@@ -35,7 +35,10 @@ func GetSensorData(tx *sql.Tx) (samples []common.SensorSample, err error) {
 			return
 		}
 
-		s.SampleTime, _ = time.Parse("2006-01-02 15:04:05", sampleTimeStr)
+		s.SampleTime, err = time.Parse("2006-01-02 15:04:05", sampleTimeStr)
+		if err != nil {
+			return
+		}
 		samples = append(samples, s)
 	}
 
