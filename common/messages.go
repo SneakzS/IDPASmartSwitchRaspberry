@@ -21,7 +21,7 @@ type ErrorResponse struct {
 
 const (
 	ActionSetWorkloadDefinition    = 1
-	ActionGetWorkloadDefinition    = 2
+	ActionGetWorkloadDefinitions   = 2
 	ActionDeleteWorkloadDefinition = 3
 	ActionSetFlags                 = 4
 	ActionGetFlags                 = 5
@@ -29,10 +29,11 @@ const (
 	ActionGetWorkloads             = 7
 
 	// Response Actions
-	ActionNotifyError           = 101
-	ActionNotifyWorkloadCreated = 102
-	ActionNotifyNoContent       = 103
-	ActionNotifyWorkloads       = 104
+	ActionNotifyError               = 101
+	ActionNotifyWorkloadCreated     = 102
+	ActionNotifyNoContent           = 103
+	ActionNotifyWorkloads           = 104
+	ActionNotifyWorkloadDefinitions = 105
 )
 
 const (
@@ -62,14 +63,15 @@ type ActiveWorkload struct {
 }
 
 type UIMessage struct {
-	ActionID           int32              `json:"actionId"`
-	RequestID          int32              `json:"requestId,omitempty"`
-	WorkloadDefinition WorkloadDefinition `json:"workloadDefinition,omitempty"`
-	Flags              uint32             `json:"flags,omitempty"`
-	FlagMask           uint32             `json:"flagMask,omitempty"`
-	ClientGUID         string             `json:"clientGuid,omitempty"`
-	ActiveWorkloads    []ActiveWorkload   `json:"activeWorkloads,omitempty"`
-	ErrorMessage       string             `json:"errorMessage,omitempty"`
-	StartTime          time.Time          `json:"startTime,omitempty"`
-	DurationM          int32              `json:"durationM,omitempty"`
+	ActionID           int32                `json:"actionId"`
+	RequestID          int32                `json:"requestId,omitempty"`
+	WorkloadDefinition WorkloadDefinition   `json:"workloadDefinition,omitempty"`
+	Flags              uint32               `json:"flags,omitempty"`
+	FlagMask           uint32               `json:"flagMask,omitempty"`
+	ClientGUID         string               `json:"clientGuid,omitempty"`
+	ActiveWorkloads    []ActiveWorkload     `json:"activeWorkloads,omitempty"`
+	CurreontWorkloads  []WorkloadDefinition `json:"currentWorkloads,omitempty"`
+	ErrorMessage       string               `json:"errorMessage,omitempty"`
+	StartTime          time.Time            `json:"startTime,omitempty"`
+	DurationM          int32                `json:"durationM,omitempty"`
 }

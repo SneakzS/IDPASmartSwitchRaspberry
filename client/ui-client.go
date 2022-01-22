@@ -188,6 +188,23 @@ func handleUIMessage(response *common.UIMessage, state *uiClientState, msg *comm
 			state.EnforceOutput = msg.Flags&common.FlagEnforce > 0
 		}
 
+	case common.ActionGetWorkloadDefinitions:
+		tx, err := conn.Begin()
+		if err != nil {
+			return false, err
+		}
+		defer tx.Rollback()
+		defs, err := GetWorkloadDefinitions(tx)
+		if err != nil {
+			return false, err
+		}
+		*response = common.UIMessage{
+			ActionID:          common.ActionNotifyWorkloadDefinitions,
+			RequestID:         msg.RequestID,
+			CurreontWorkloads: defs,
+		}
+		return true, nil
+
 	case common.ActionSetWorkloadDefinition:
 		def := msg.WorkloadDefinition
 		tx, err := conn.Begin()
