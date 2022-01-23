@@ -77,15 +77,50 @@ func runUIClient(stateChan chan<- uiClientState, sqlConn *sql.DB, c *Config, don
 	}
 }
 
+type wsReadResult struct {
+	messageType int
+	message     []byte
+	err         error
+}
+
+func readMessagesFromConn(messages chan<- wsReadResult, c *websocket.Conn) {
+	for {
+		res := wsReadResult{}
+		res.messageType, res.message, res.err = c.ReadMessage()
+		messages <- res
+		if res.err != nil {
+			close(messages)
+			return
+		}
+	}
+}
+
 func runUIMessagePump(isOkChan chan<- bool, messagesOUT <-chan common.UIMessage, messagesIN chan<- common.UIMessage, c *Config, done <-chan struct{}) {
-	var closing bool
-	var conn *websocket.Conn
-	var err error
-	var dialer websocket.Dialer
-	var pingTicker = time.NewTicker(10 * time.Second)
+	var (
+		closing        bool
+		dialer         websocket.Dialer
+		pingTicker     = time.NewTicker(10 * time.Second)
+		readResultChan chan wsReadResult
+	)
 
-	go func() {
+	for {
+		conn, _, err := dialer.Dial(c.ServerURL, nil)
+		if err != nil {
+			goto handleError
+		}
 
+		err = sendHeloMessage(conn, c.ClientGUID)
+		if err != nil {
+			goto handleError
+		}
+
+		log.Println("connected to " + c.ServerURL)
+		isOkChan <- true
+
+		readResultChan = make(chan wsReadResult, 1)
+		go readMessagesFromConn(readResultChan, conn)
+
+	receive:
 		for {
 			select {
 			case <-done:
@@ -96,6 +131,28 @@ func runUIMessagePump(isOkChan chan<- bool, messagesOUT <-chan common.UIMessage,
 					conn.WriteMessage(websocket.CloseMessage, nil)
 				}
 				return
+
+			case res := <-readResultChan:
+				if res.err != nil {
+					readResultChan = nil
+					log.Println(err)
+					goto handleError
+				}
+
+				switch res.messageType {
+				case websocket.BinaryMessage:
+
+				case websocket.TextMessage:
+					var parsedMessage common.UIMessage
+					err := json.Unmarshal(res.message, &parsedMessage)
+					if err != nil {
+						log.Println("Invalid message received", err)
+						continue receive
+					}
+
+					//log.Println(string(msg))
+					messagesIN <- parsedMessage
+				}
 
 			case msg := <-messagesOUT:
 				data, err := json.Marshal(&msg)
@@ -111,48 +168,13 @@ func runUIMessagePump(isOkChan chan<- bool, messagesOUT <-chan common.UIMessage,
 
 			case <-pingTicker.C:
 				// send a ping periodically
-				conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(time.Second))
-			}
-		}
-
-	}()
-
-	for {
-		conn, _, err = dialer.Dial(c.ServerURL, nil)
-		if err != nil {
-			goto handleError
-		}
-
-		err = sendHeloMessage(conn, c.ClientGUID)
-		if err != nil {
-			goto handleError
-		}
-
-		log.Println("connected to " + c.ServerURL)
-		isOkChan <- true
-
-	receive:
-		for {
-			msgType, msg, err := conn.ReadMessage()
-			if err != nil {
-				log.Println(err)
-				goto handleError
-			}
-
-			switch msgType {
-			case websocket.BinaryMessage:
-
-			case websocket.TextMessage:
-				var parsedMessage common.UIMessage
-				err := json.Unmarshal(msg, &parsedMessage)
+				err = conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(time.Second))
 				if err != nil {
-					log.Println("Invalid message received", err)
-					continue receive
+					log.Println(err)
+					goto handleError
 				}
-
-				//log.Println(string(msg))
-				messagesIN <- parsedMessage
 			}
+
 		}
 
 	handleError:
