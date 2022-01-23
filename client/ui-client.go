@@ -132,8 +132,8 @@ func runUIMessagePump(isOkChan chan<- bool, messagesOUT <-chan common.UIMessage,
 				}
 				return
 
-			case res := <-readResultChan:
-				if res.err != nil {
+			case res, ok := <-readResultChan:
+				if res.err != nil || !ok {
 					readResultChan = nil
 					log.Println(err)
 					goto handleError

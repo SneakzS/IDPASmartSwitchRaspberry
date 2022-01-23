@@ -79,33 +79,61 @@ func (e ErrWorkloadPlan) Error() string {
 	)
 }
 
-func updateProviderClient(hasWarning *bool, now time.Time, conn *sql.DB, serverURL string, customerID int32) ([]WorkloadSample, error) {
+func getWorkloadAndSamples(db *sql.DB, now time.Time) (definitions []common.WorkloadDefinition, workloads []Workload, samples []WorkloadSample, err error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return
+	}
+	defer tx.Commit()
+
+	definitions, err = GetWorkloadDefinitions(tx)
+	if err != nil {
+		return
+	}
+
+	workloads, err = GetWorkloads(tx, now, 12*60)
+	if err != nil {
+		return
+	}
+
+	samples, err = GetWorkloadSamples(tx, now, 12*60)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func storeWorkloadAndUpdateSamples(db *sql.DB, pw *PlannedWorkload, wl *Workload, now time.Time) (samples []WorkloadSample, err error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	err = CreateWorkloadAndSamples(tx, pw.Definition, pw.MatchTime, wl.OffsetM)
+	if err != nil {
+		return nil, err
+	}
+
+	samples, err = GetWorkloadSamples(tx, now, 12*60)
+	if err != nil {
+		return nil, err
+	}
+
+	err = tx.Commit()
+	return
+}
+
+func updateProviderClient(hasWarning *bool, now time.Time, db *sql.DB, serverURL string, customerID int32) ([]WorkloadSample, error) {
 	type int32Time struct {
 		i  int32
 		ts int64
 	}
 
-	tx, err := conn.Begin()
+	definitions, workloads, samples, err := getWorkloadAndSamples(db, now)
 	if err != nil {
 		return nil, err
 	}
-
-	definitions, err := GetWorkloadDefinitions(tx)
-	if err != nil {
-		return nil, err
-	}
-
-	workloads, err := GetWorkloads(tx, now, 12*60)
-	if err != nil {
-		return nil, err
-	}
-
-	samples, err := GetWorkloadSamples(tx, now, 12*60)
-	if err != nil {
-		return nil, err
-	}
-
-	tx.Rollback()
 
 	set := make(map[int32Time]struct{})
 	for _, w := range workloads {
@@ -140,29 +168,14 @@ func updateProviderClient(hasWarning *bool, now time.Time, conn *sql.DB, serverU
 				continue
 			}
 
-			tx, err = conn.Begin()
-			if err != nil {
-				return nil, err
-			}
-
-			err = CreateWorkloadAndSamples(tx, pw.Definition, pw.MatchTime, wl.OffsetM)
-			if err != nil {
-				return nil, err
-			}
-
-			samples, err = GetWorkloadSamples(tx, now, 12*60)
-			if err != nil {
-				return nil, err
-			}
-
-			err = tx.Commit()
+			samples, err = storeWorkloadAndUpdateSamples(db, &pw, &wl, now)
 			if err != nil {
 				return nil, err
 			}
 		}
 	}
 
-	tx, err = conn.Begin()
+	tx, err := db.Begin()
 	if err != nil {
 		return nil, err
 	}
