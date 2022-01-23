@@ -63,7 +63,7 @@ func Run(outChan chan<- Output, inChan <-chan Input, c *Config, done <-chan stru
 			}
 
 			// blink led3 if the provider failed
-			if !providerState.IsOK {
+			if !providerState.IsOK || providerState.HasWarning {
 				newOutput.Led3 = !newOutput.Led3
 			} else {
 				newOutput.Led3 = false

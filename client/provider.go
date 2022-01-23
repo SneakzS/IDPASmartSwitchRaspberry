@@ -15,6 +15,7 @@ import (
 
 type providerClientState struct {
 	IsOK         bool
+	HasWarning   bool
 	EnableOutput bool
 }
 
@@ -36,7 +37,9 @@ func runProviderClient(stateChan chan<- providerClientState, conn *sql.DB, c *Co
 
 		case now = <-ticker.C:
 			if lastSampleUpdate.Add(time.Minute).Before(now) {
-				wls, err := updateProviderClient(now, conn, c.ProviderURL, int32(c.CustomerID))
+				newState.HasWarning = false
+
+				wls, err := updateProviderClient(&newState.HasWarning, now, conn, c.ProviderURL, int32(c.CustomerID))
 				if err != nil {
 					log.Println(err)
 					newState.IsOK = false
@@ -76,7 +79,7 @@ func (e ErrWorkloadPlan) Error() string {
 	)
 }
 
-func updateProviderClient(now time.Time, conn *sql.DB, serverURL string, customerID int32) ([]WorkloadSample, error) {
+func updateProviderClient(hasWarning *bool, now time.Time, conn *sql.DB, serverURL string, customerID int32) ([]WorkloadSample, error) {
 	type int32Time struct {
 		i  int32
 		ts int64
@@ -132,6 +135,7 @@ func updateProviderClient(now time.Time, conn *sql.DB, serverURL string, custome
 			wl := Workload{}
 			err = RequestWorkload(&wl, pw, serverURL, customerID)
 			if err != nil {
+				*hasWarning = true
 				log.Println(err)
 				continue
 			}
