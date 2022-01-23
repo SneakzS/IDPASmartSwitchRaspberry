@@ -82,6 +82,7 @@ func runUIMessagePump(isOkChan chan<- bool, messagesOUT <-chan common.UIMessage,
 	var conn *websocket.Conn
 	var err error
 	var dialer websocket.Dialer
+	var pingTicker = time.NewTicker(10 * time.Second)
 
 	go func() {
 
@@ -107,6 +108,10 @@ func runUIMessagePump(isOkChan chan<- bool, messagesOUT <-chan common.UIMessage,
 					log.Println(err)
 					continue
 				}
+
+			case <-pingTicker.C:
+				// send a ping periodically
+				conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(time.Second))
 			}
 		}
 
