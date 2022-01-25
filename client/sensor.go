@@ -35,7 +35,7 @@ func GetSensorData(tx *sql.Tx) (samples []common.SensorSample, err error) {
 			return
 		}
 
-		s.SampleTime, err = time.Parse("2006-01-02 15:04:05", sampleTimeStr)
+		s.SampleTime, err = time.Parse(sqliteDatetimeFormat, sampleTimeStr)
 		if err != nil {
 			return
 		}

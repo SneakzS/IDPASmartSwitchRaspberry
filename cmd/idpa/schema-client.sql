@@ -42,3 +42,11 @@ CREATE TABLE SensorSample (
     current FLOAT NOT NULL,
     voltage FLOAT NOT NULL,
 );
+
+CREATE TABLE Log (
+    logID INTEGER NOT NULL PRIMARY KEY,
+    logTime TIMESTAMP NOT NULL,
+    severity INTEGER NOT NULL,
+    source TEXT NOT NULL,
+    message TEXT NOT NULL
+);

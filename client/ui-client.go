@@ -72,6 +72,18 @@ func runUIClient(stateChan chan<- uiClientState, sqlConn *sql.DB, c *Config, don
 
 		if newState != currentState {
 			stateChan <- newState
+
+			// write to persistent log if state was changed
+			if newState.EnforceOutput {
+				if newState.EnableOutput {
+					WritePersistendLog(sqlConn, LogInfo, "ui", "Enforce power on")
+				} else {
+					WritePersistendLog(sqlConn, LogInfo, "ui", "Enforce power off")
+				}
+			} else {
+				WritePersistendLog(sqlConn, LogInfo, "ui", "Resume to time schedule")
+			}
+
 			currentState = newState
 		}
 	}
@@ -323,6 +335,25 @@ func handleUIMessage(response *common.UIMessage, state *uiClientState, msg *comm
 			ActionID:      common.ActionNotifySensorSamples,
 			RequestID:     msg.RequestID,
 			SensorSamples: samples,
+		}
+		return true, nil
+
+	case common.ActionGetLogEntries:
+		tx, err := conn.Begin()
+		if err != nil {
+			return false, err
+		}
+		defer tx.Rollback()
+
+		entries, err := GetLogEntries(tx)
+		if err != nil {
+			return false, err
+		}
+
+		*response = common.UIMessage{
+			ActionID:   common.ActionNotifyLogEntries,
+			RequestID:  msg.RequestID,
+			LogEntries: entries,
 		}
 		return true, nil
 	}

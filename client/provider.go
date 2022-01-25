@@ -58,6 +58,13 @@ func runProviderClient(stateChan chan<- providerClientState, conn *sql.DB, c *Co
 			nowTC := now.Truncate(time.Minute)
 			sample := sampleMap[nowTC.Unix()]
 			newState.EnableOutput = sample.OutputEnabled
+
+			if currentState.EnableOutput != newState.EnableOutput {
+				if newState.EnableOutput {
+					WritePersistendLog(conn, LogInfo, "provider-client",
+						fmt.Sprintf("Enable output by Workload %d", sample.WorkloadID))
+				}
+			}
 		}
 
 		if newState != currentState {
@@ -151,11 +158,13 @@ func updateProviderClient(hasWarning *bool, now time.Time, db *sql.DB, serverURL
 		}
 
 		if overlaps {
-			log.Println(ErrWorkloadPlan{
+			err = ErrWorkloadPlan{
 				WorkloadDefinitionID: pw.Definition.WorkloadDefinitionID,
 				MatchTime:            pw.MatchTime,
 				Reason:               fmt.Sprintf("it overlaps with workload %d", s.WorkloadID),
-			})
+			}
+			log.Println(err)
+			WritePersistendLog(db, LogWarn, "provider-client", fmt.Sprint(err))
 			continue
 		}
 
@@ -165,6 +174,12 @@ func updateProviderClient(hasWarning *bool, now time.Time, db *sql.DB, serverURL
 			if err != nil {
 				*hasWarning = true
 				log.Println(err)
+
+				WritePersistendLog(db, LogWarn, "provider-client", fmt.Sprint(ErrWorkloadPlan{
+					WorkloadDefinitionID: pw.Definition.WorkloadDefinitionID,
+					MatchTime:            pw.MatchTime,
+					Reason:               fmt.Sprint(err),
+				}))
 				continue
 			}
 

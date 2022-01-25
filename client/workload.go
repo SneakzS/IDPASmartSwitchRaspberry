@@ -32,7 +32,7 @@ func GetWorkloadDefinitions(tx *sql.Tx) ([]common.WorkloadDefinition, error) {
 			return definitions, err
 		}
 
-		w.ExpiryDate, err = time.Parse("2006-01-02 15:04:05", expiryDateStr)
+		w.ExpiryDate, err = time.Parse(sqliteDatetimeFormat, expiryDateStr)
 		if err != nil {
 			return definitions, err
 		}
